@@ -1,0 +1,41 @@
+{
+  "name": "frontend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/electron/bootstrap.mjs",
+  "scripts": {
+    "dev:vite": "vite",
+    "dev:electron": "electron .",
+    "dev": "run-p dev:vite dev:electron",
+    "build": "run-p type-check \"build-only {@}\" --",
+    "preview": "vite preview",
+    "build-only": "vite build",
+    "type-check": "vue-tsc --build",
+    "format": "prettier --write --experimental-cli src/"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.48.0",
+    "highcharts": "^13.1.1",
+    "pinia": "^4.0.3",
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.5",
+    "@types/node": "^24.19.0",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/tsconfig": "^0.9.1",
+    "electron": "^44.5.1",
+    "npm-run-all2": "^9.0.3",
+    "prettier": "3.9.6",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.0",
+    "vite": "^8.2.2",
+    "vite-plugin-vue-devtools": "^8.2.1",
+    "vue-tsc": "^3.3.11"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  }
+}
