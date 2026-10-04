@@ -8,6 +8,8 @@ import json
 
 def main():
 
+    Route.get('/dashboard', ['DashboardController', 'index'])
+
     Route.get('/settings', ['SettingsController', 'index'])
     Route.post('/test', ['TestController', 'index'])
 

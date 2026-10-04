@@ -71,23 +71,3 @@ class Route:
             sys.stdout.flush()
             sys.exit(0)
 
-# route = Route()
-
-# if __name__ == "__main__":
-#     # GET Endpoints
-#     Route.get('/device-information', ['SettingsController', 'index'])
-#     Route.get('/cpu-status', ['SystemController', 'get_cpu'])
-
-#     # POST Endpoints (contoh kirim data config/setting baru)
-#     Route.post('/settings', ['SettingsController', 'store'])
-
-#     # PUT Endpoints (contoh update data)
-#     Route.put('/settings', ['SettingsController', 'update'])
-
-#     # DELETE Endpoints (contoh hapus data/log)
-#     Route.delete('/logs', ['SystemController', 'clear_logs'])
-
-#     # Fallback kalau rute tidak terdaftar sama sekali
-#     not_found = {"status": "error", "message": f"Route {req_method} {req_url} tidak ditemukan"}
-#     print(json.dumps(not_found))
-#     sys.stdout.flush()
