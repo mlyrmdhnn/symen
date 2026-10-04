@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import http from '@/views/lib/http'
 const result = ref<any>()
+let earlyInitialize: boolean = true
 
 export const useEarlyStartStore = defineStore('earlyStart', () => {
   const isLoading = ref(true)
@@ -15,8 +16,9 @@ export const useEarlyStartStore = defineStore('earlyStart', () => {
       console.error(error)
     } finally {
       isLoading.value = false
+      earlyInitialize = false
     }
   }
 
-  return { isLoading, getDeviceInformation, result }
+  return { isLoading, getDeviceInformation, result, earlyInitialize }
 })

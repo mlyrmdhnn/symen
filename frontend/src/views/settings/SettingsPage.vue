@@ -2,22 +2,19 @@
 import MainTemplate from '@/template/MainTemplate.vue'
 import { onMounted, ref } from 'vue'
 import { useEarlyStartStore } from '@/stores/earlyStart'
+import SettingsCard from '@/components/SettingsCard.vue'
+import ToggleButton from '@/components/ToggleButton.vue'
+
+const toggleButton = ref(false)
+
 const { result } = useEarlyStartStore()
-
-type DeviceInfoItem = {
-  label: string
-  value: string
-}
-
-const deviceInfo: DeviceInfoItem[] = [{ label: 'Device Name', value: 'MacBook Pro 14"' }]
 </script>
 
 <template>
   <MainTemplate>
     <h1 class="font-bold text-lg text-white">Settings</h1>
     <div class="mt-10">
-      <section class="border border-slate-800 rounded-md p-4 bg-[#10151A]">
-        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Theme</h2>
+      <SettingsCard tittle="Theme">
         <div class="space-y-2">
           <label
             for="light"
@@ -49,13 +46,16 @@ const deviceInfo: DeviceInfoItem[] = [{ label: 'Device Name', value: 'MacBook Pr
             <input type="radio" name="theme" id="system" class="accent-blue-500 cursor-pointer" />
           </label>
         </div>
-      </section>
+      </SettingsCard>
 
-      <section class="mt-6 border border-slate-800 rounded-md p-4 bg-[#10151A]">
-        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
-          Device Information
-        </h2>
+      <SettingsCard tittle="General" class="mt-6 text-slate-400 text-sm">
+        <div class="flex justify-between">
+          <section>Realtime Dashboard Chart</section>
+          <ToggleButton v-model="toggleButton" />
+        </div>
+      </SettingsCard>
 
+      <SettingsCard tittle="Device Information" class="mt-6">
         <dl class="divide-y divide-slate-800">
           <div class="flex items-start justify-between gap-4 py-2.5 group">
             <dt class="text-sm text-slate-400 shrink-0">Device Name</dt>
@@ -116,7 +116,7 @@ const deviceInfo: DeviceInfoItem[] = [{ label: 'Device Name', value: 'MacBook Pr
             </dd>
           </div>
         </dl>
-      </section>
+      </SettingsCard>
     </div>
   </MainTemplate>
 </template>

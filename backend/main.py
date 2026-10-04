@@ -1,21 +1,14 @@
+from core.db.initialize_db import InitializeDb
 import sys
-from router.router import Route
-import json
 
-# route = Route()
-
-
+InitializeDb.init_db()
 
 def main():
 
-    Route.get('/dashboard', ['DashboardController', 'index'])
+    import api.api
 
-    Route.get('/settings', ['SettingsController', 'index'])
-    Route.post('/test', ['TestController', 'index'])
-
-    from router.router import req_method, req_url
+    from core.router.router import req_method, req_url
     not_found = {"status": "error", "message": f"Route {req_method} {req_url} tidak ditemukan"}
-    # print(json.dumps(not_found))
     sys.stdout.flush()
 
 if __name__ == "__main__" :

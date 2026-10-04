@@ -3,7 +3,6 @@ import sys
 import json
 
 
-# 1. Tangkap request dari Electron
 try:
     raw_arg = sys.argv[1]
     request = json.loads(raw_arg)
@@ -16,18 +15,15 @@ except Exception:
     req_payload = {}
 
 def execute_route(target_method, target_url, controller_name, method_name):
-    # Cek apakah HTTP Method DAN URL-nya cocok
     if req_method != target_method or req_url != target_url:
-        return None # Bukan rute yang dicari, lewati
+        return None 
 
     try:
-        # Import file controller secara dinamis
         full_controller_name = f"controller.{controller_name}"
         controller = importlib.import_module(full_controller_name)
         
         if hasattr(controller, method_name):
             func = getattr(controller, method_name)
-            # Jalankan fungsi controllernya dan kirim payload (bisa berupa data body atau params)
             result = func(req_payload)
             return result
         else:
