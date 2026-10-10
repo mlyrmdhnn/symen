@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { useEarlyStartStore } from './stores/earlyStart'
+import { useSettings } from './stores/settings'
 
 const earlyStartStore = useEarlyStartStore()
 const { isLoading } = storeToRefs(earlyStartStore)
+const settingsStore = useSettings()
 earlyStartStore.getDeviceInformation()
+void settingsStore.initializeTheme()
 </script>
 
 <template>

@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import MainTemplate from '@/template/MainTemplate.vue'
 import Highcharts from 'highcharts'
 import { useDashboard } from '@/composables/dashboard/useDashboard'
+import { useSettings } from '@/stores/settings'
 
 const { chartData, getChartData } = useDashboard()
+const settingsStore = useSettings()
+const { resolvedTheme } = storeToRefs(settingsStore)
 
 const cpuChartRef = ref<HTMLElement | null>(null)
 const ramChartRef = ref<HTMLElement | null>(null)
@@ -18,11 +22,14 @@ const ramUsage = ref(0)
 const ramUsed = ref(0)
 const ramTotal = ref(0)
 
+const freeChartColor = () => (resolvedTheme.value === 'light' ? '#e2e8f0' : '#1e293b')
+const chartTitleColor = () => (resolvedTheme.value === 'light' ? '#475569' : '#94a3b8')
+
 const initCharts = () => {
   if (cpuChartRef.value) {
     cpuChart = Highcharts.chart(cpuChartRef.value, {
       chart: { type: 'pie', backgroundColor: 'transparent', height: '220px' },
-      title: { text: 'CPU Usage', style: { color: '#94a3b8', fontSize: '14px' } },
+      title: { text: 'CPU Usage', style: { color: chartTitleColor(), fontSize: '14px' } },
       credits: { enabled: false },
       plotOptions: {
         pie: {
@@ -36,7 +43,7 @@ const initCharts = () => {
           type: 'pie',
           data: [
             { name: 'Used', y: 0, color: '#3b82f6' },
-            { name: 'Free', y: 100, color: '#1e293b' },
+            { name: 'Free', y: 100, color: freeChartColor() },
           ],
         },
       ],
@@ -46,7 +53,7 @@ const initCharts = () => {
   if (ramChartRef.value) {
     ramChart = Highcharts.chart(ramChartRef.value, {
       chart: { type: 'pie', backgroundColor: 'transparent', height: '220px' },
-      title: { text: 'RAM Usage', style: { color: '#94a3b8', fontSize: '14px' } },
+      title: { text: 'RAM Usage', style: { color: chartTitleColor(), fontSize: '14px' } },
       credits: { enabled: false },
       plotOptions: {
         pie: {
@@ -60,7 +67,7 @@ const initCharts = () => {
           type: 'pie',
           data: [
             { name: 'Used', y: 0, color: '#10b981' },
-            { name: 'Free', y: 100, color: '#1e293b' },
+            { name: 'Free', y: 100, color: freeChartColor() },
           ],
         },
       ],
@@ -83,20 +90,20 @@ watch(
     ramTotal.value = payload.ram.ramTotal ?? 0
 
     if (cpuChart) {
-      cpuChart.series[0].setData(
+      cpuChart.series[0]?.setData(
         [
           { name: 'Used', y: cpuUsage.value, color: '#3b82f6' },
-          { name: 'Free', y: +(100 - cpuUsage.value).toFixed(1), color: '#1e293b' },
+          { name: 'Free', y: +(100 - cpuUsage.value).toFixed(1), color: freeChartColor() },
         ],
         true,
       )
     }
 
     if (ramChart) {
-      ramChart.series[0].setData(
+      ramChart.series[0]?.setData(
         [
           { name: 'Used', y: ramUsage.value, color: '#10b981' },
-          { name: 'Free', y: +(100 - ramUsage.value).toFixed(1), color: '#1e293b' },
+          { name: 'Free', y: +(100 - ramUsage.value).toFixed(1), color: freeChartColor() },
         ],
         true,
       )
@@ -104,6 +111,31 @@ watch(
   },
   { deep: true, immediate: true },
 )
+
+watch(resolvedTheme, () => {
+  const titleStyle = { color: chartTitleColor(), fontSize: '14px' }
+  cpuChart?.setTitle({ style: titleStyle })
+  ramChart?.setTitle({ style: titleStyle })
+
+  if (cpuChart) {
+    cpuChart.series[0]?.setData(
+      [
+        { name: 'Used', y: cpuUsage.value, color: '#3b82f6' },
+        { name: 'Free', y: +(100 - cpuUsage.value).toFixed(1), color: freeChartColor() },
+      ],
+      true,
+    )
+  }
+  if (ramChart) {
+    ramChart.series[0]?.setData(
+      [
+        { name: 'Used', y: ramUsage.value, color: '#10b981' },
+        { name: 'Free', y: +(100 - ramUsage.value).toFixed(1), color: freeChartColor() },
+      ],
+      true,
+    )
+  }
+})
 
 onMounted(() => {
   initCharts()
@@ -115,7 +147,7 @@ onUnmounted(() => {
   if (intervalChart) clearInterval(intervalChart)
 })
 
-const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+const isDarkMode = computed(() => resolvedTheme.value === 'dark')
 </script>
 
 <template>
