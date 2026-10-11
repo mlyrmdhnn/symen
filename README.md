@@ -1,5 +1,7 @@
 # Symen
 
+[Download Symen Installer (v1.0.0)](https://github.com/mlyrmdhnn/symen/releases/download/v1.0.0/Symen-Setup-.exe)
+
 Symen is a Windows desktop app for monitoring a computer and managing local
 services. It is built with Vue, Electron, and a Python backend.
 
