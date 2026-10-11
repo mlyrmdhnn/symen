@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-
+import logoURL from '@/assets/symen_logo.png'
 import {
   BookOpenText,
   FileStack,
@@ -59,11 +59,11 @@ const menus = [
     <header class="draggable h-16 bg-slate-950 flex items-center justify-between px-4">
       <!-- Kiri: Logo & Judul -->
       <div class="flex items-center space-x-3 select-none">
-        <!-- <img src="/logo.png" class="w-6 h-6" alt="Logo" /> -->
-        <span class="font-semibold text-sm text-slate-200">My Dev Tool</span>
-        <span class="text-xs bg-blue-900 text-blue-200 px-2 py-0.5 rounded font-mono">
+        <img :src="logoURL" class="w-10 h-10" alt="Logo" />
+        <span class="font-semibold text-sm text-slate-200">Symen</span>
+        <!-- <span class="text-xs bg-blue-900 text-blue-200 px-2 py-0.5 rounded font-mono">
           Personal
-        </span>
+        </span> -->
       </div>
 
       <div class="flex-grow px-10">V.1</div>

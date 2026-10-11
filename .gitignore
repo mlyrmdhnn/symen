@@ -1,0 +1,9 @@
+/installer-output/
+/symen_setup.iss
+/frontend/dist/
+/frontend/dist-electron/
+/frontend/release-prod/
+/backend/dist/
+/backend/build/
+/backend/core/db/services.json
+/backend/core/db/service-logs/

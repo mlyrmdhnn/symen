@@ -4,7 +4,7 @@ import { useEarlyStartStore } from './stores/earlyStart'
 import { useSettings } from './stores/settings'
 
 const earlyStartStore = useEarlyStartStore()
-const { isLoading } = storeToRefs(earlyStartStore)
+const { isLoading, earlyInitialize } = storeToRefs(earlyStartStore)
 const settingsStore = useSettings()
 earlyStartStore.getDeviceInformation()
 void settingsStore.initializeTheme()
@@ -13,7 +13,7 @@ void settingsStore.initializeTheme()
 <template>
   <RouterView />
   <div
-    v-if="isLoading"
+    v-if="earlyInitialize"
     class="absolute top-0 right-0 bg-slate-950 h-screen w-screen flex justify-center items-center"
   >
     <div>

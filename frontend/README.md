@@ -40,3 +40,20 @@ npm run dev
 ```sh
 npm run build
 ```
+
+### Build the Windows production package
+
+The backend is packaged as a PyInstaller onedir executable and copied into the
+Electron resources folder. Install the backend build requirements before packaging:
+
+```powershell
+..\backend\venv\Scripts\python.exe -m pip install -r ..\backend\requirements-build.txt
+npm run package:win
+```
+
+This creates `frontend/release-prod/win-unpacked`. The optional Inno Setup
+installer script is not included in this repository. In production, backend settings,
+service data, logs, and the editable `symen.conf` are stored in Electron's
+per-user application data directory; the bundled installation remains read-only.
+On Windows, this is normally `%APPDATA%\Symen`. The Settings page shows the exact
+`symen.conf` path and lets users edit service startup arguments after confirmation.

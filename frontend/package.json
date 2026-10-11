@@ -1,16 +1,22 @@
 {
   "name": "frontend",
+  "productName": "Symen",
   "version": "0.0.0",
+  "description": "Symen desktop application",
+  "author": "Symen",
   "private": true,
   "type": "module",
-  "main": "src/electron/bootstrap.mjs",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev:vite": "vite",
-    "dev:electron": "electron .",
+    "dev:electron": "electron src/electron/bootstrap.mjs",
     "dev": "run-p dev:vite dev:electron",
-    "build": "run-p type-check \"build-only {@}\" --",
+    "build": "run-p type-check build-only build:electron",
     "preview": "vite preview",
     "build-only": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json && node scripts/copy-electron-preload.mjs",
+    "build:backend": "powershell -NoProfile -ExecutionPolicy Bypass -File ..\\backend\\build_backend.ps1",
+    "package:win": "npm run build:backend && npm run build && electron-builder --win dir",
     "type-check": "vue-tsc --build",
     "format": "prettier --write --experimental-cli src/"
   },
@@ -27,6 +33,7 @@
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/tsconfig": "^0.9.1",
     "electron": "^44.5.1",
+    "electron-builder": "^26.0.12",
     "npm-run-all2": "^9.0.3",
     "prettier": "3.9.6",
     "tsx": "^4.23.15",
@@ -37,5 +44,32 @@
   },
   "engines": {
     "node": "^22.18.0 || >=24.12.0"
+  },
+  "build": {
+    "appId": "com.symen.desktop",
+    "productName": "Symen",
+    "directories": {
+      "output": "release-prod"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/symen-backend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "public/symen_logo.ico",
+      "target": [
+        "dir"
+      ]
+    }
   }
 }

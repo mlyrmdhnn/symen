@@ -1,271 +1,444 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import MainTemplate from '@/template/MainTemplate.vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import { Columns3 } from '@lucide/vue'
+import MainTemplate from '@/template/MainTemplate.vue'
+import { useServices, type Service } from '@/stores/services'
 
+const serviceStore = useServices()
+const router = useRouter()
+const search = ref('')
+const onlyRunning = ref(false)
 const showColumnsMenu = ref(false)
-const setShowColumnsMenu = () => {
-  showColumnsMenu.value = !showColumnsMenu.value
-}
+const activeDropdownId = ref<string | null>(null)
+const editingService = ref<Service | null>(null)
+const editForm = reactive({ path: '', executableName: '', argumentsText: '' })
+let refreshInterval: ReturnType<typeof setInterval> | undefined
+const columns = [
+  { key: 'status', label: 'Status' },
+  { key: 'type', label: 'Type' },
+  { key: 'path', label: 'Environment' },
+  { key: 'pid', label: 'PID' },
+  { key: 'startedAt', label: 'Last Started' },
+]
+const visibleColumns = ref(columns.map((column) => column.key))
 
-const activeDropdownIndex = ref<number | null>(null)
+const visibleServices = computed(() => {
+  const query = search.value.trim().toLowerCase()
+  return serviceStore.services.filter((service) => {
+    const matchesSearch =
+      !query ||
+      service.name.toLowerCase().includes(query) ||
+      service.serviceType.toLowerCase().includes(query) ||
+      service.path.toLowerCase().includes(query)
+    return matchesSearch && (!onlyRunning.value || service.status === 'running')
+  })
+})
 
-const toggleOptions = (index: number) => {
-  if (activeDropdownIndex.value === index) {
-    activeDropdownIndex.value = null
-  } else {
-    activeDropdownIndex.value = index
-  }
-}
+const counts = computed(() => ({
+  running: serviceStore.services.filter((service) => service.status === 'running').length,
+  stopped: serviceStore.services.filter((service) => service.status === 'stopped').length,
+  error: serviceStore.services.filter((service) => service.status === 'error').length,
+}))
 
-const closeAllDropdowns = () => {
-  activeDropdownIndex.value = null
+const load = () => void serviceStore.loadServices()
+const closeDropdown = () => {
+  activeDropdownId.value = null
   showColumnsMenu.value = false
 }
 
-const coloms = ['port', 'PID', 'CPU (%)', 'Memory Usage', 'Memory read/write', 'Last Started']
+const toggleColumn = (key: string) => {
+  visibleColumns.value = visibleColumns.value.includes(key)
+    ? visibleColumns.value.filter((column) => column !== key)
+    : [...visibleColumns.value, key]
+}
 
-const row = [
-  {
-    port: '3000',
-    pid: '14280',
-    cpu: '2.4%',
-    usageMemory: '145.2 MB',
-    readOrWriteMemory: 'Read/Write',
-    lastStarted: '2026-09-27 08:30:12',
-    name: 'Nginx',
-  },
-  {
-    port: '8080',
-    pid: '9842',
-    cpu: '0.1%',
-    usageMemory: '88.5 MB',
-    readOrWriteMemory: 'Read Only',
-    lastStarted: '2026-09-27 09:15:00',
-    name: 'Apache',
-  },
-  {
-    port: '5173',
-    pid: '21054',
-    cpu: '4.8%',
-    usageMemory: '230.1 MB',
-    readOrWriteMemory: 'Read/Write',
-    lastStarted: '2026-09-27 10:02:45',
-    name: 'MySQL',
-  },
-  {
-    port: '3306',
-    pid: '4120',
-    cpu: '0.0%',
-    usageMemory: '310.8 MB',
-    readOrWriteMemory: 'Read/Write',
-    lastStarted: '2026-09-27 07:00:10',
-    name: 'PgSQL',
-  },
-  {
-    port: '5432',
-    pid: '6531',
-    cpu: '0.2%',
-    usageMemory: '115.4 MB',
-    readOrWriteMemory: 'Read Only',
-    lastStarted: '2026-09-27 07:00:15',
-    name: 'Apache Kafka',
-  },
-]
+const runAction = async (action: 'start' | 'stop' | 'delete', service: Service) => {
+  closeDropdown()
+  if (action === 'delete' && !window.confirm(`Remove ${service.name} from the list?`)) return
+  try {
+    await serviceStore.serviceAction(action, service.id)
+  } catch {
+    // The store exposes action errors in the service list.
+  }
+  await serviceStore.loadServices()
+}
+
+const edit = (service: Service) => {
+  serviceStore.setError('')
+  editingService.value = service
+  editForm.path = service.path
+  editForm.executableName = service.executableName
+  editForm.argumentsText = service.arguments.join('\n')
+  closeDropdown()
+}
+
+const browseEditFolder = async () => {
+  try {
+    const selectedPath = await window.electronAPI?.selectDirectory()
+    if (selectedPath) editForm.path = selectedPath
+  } catch (error) {
+    serviceStore.setError(error instanceof Error ? error.message : String(error))
+  }
+}
+
+const saveEdit = async () => {
+  if (!editingService.value) return
+  try {
+    await serviceStore.updateService({
+      id: editingService.value.id,
+      path: editForm.path,
+      executableName: editForm.executableName,
+      arguments: editForm.argumentsText.split(/\r?\n/).filter((argument) => argument.length > 0),
+    })
+    editingService.value = null
+  } catch {
+    // The store exposes update errors in the service list.
+  }
+}
+
+const openLogs = (service?: Service) => {
+  const target = service ? `/logs?service=${encodeURIComponent(service.id)}` : '/logs'
+  void router.push(target)
+  closeDropdown()
+}
+
+onMounted(() => {
+  load()
+  refreshInterval = setInterval(load, 2500)
+})
+
+onUnmounted(() => {
+  if (refreshInterval) clearInterval(refreshInterval)
+})
 </script>
 
 <template>
-  <MainTemplate @click="closeAllDropdowns">
-    <h1 class="font-bold text-lg text-white">Services</h1>
-    <div class="mt-10">
-      <!-- Header -->
-      <header>
-        <div class="flex justify-between">
-          <div class="flex items-center space-x-4">
-            <div class="relative flex items-center">
-              <svg
-                class="absolute left-3 w-4 h-4 text-slate-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search"
-                class="bg-[#080B0E] border border-slate-700 text-sm rounded-md pl-10 pr-4 py-2 text-white focus:outline-none focus:border-blue-500 w-80"
-              />
-            </div>
+  <MainTemplate @click="closeDropdown">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 class="font-bold text-lg text-white">Services</h1>
+        <p class="mt-1 text-sm text-slate-400">Manage native services on this machine.</p>
+      </div>
+      <div class="flex gap-2">
+        <button
+          class="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          @click.stop="openLogs()"
+        >
+          Global logs
+        </button>
+        <RouterLink
+          to="/add-service"
+          class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500"
+        >
+          Add service
+        </RouterLink>
+      </div>
+    </div>
 
-            <div class="flex items-center space-x-3">
-              <div class="relative" @click.stop>
-                <button
-                  @click="setShowColumnsMenu"
-                  class="p-2 text-blue-400 hover:bg-slate-800 rounded cursor-pointer"
-                >
-                  <Columns3 class="w-5 h-5" />
-                </button>
-                <div
-                  class="h-80 w-80 right-0 bg-[#10151A] border border-slate-700 flex flex-col justify-between p-2 z-50 rounded shadow-xl"
-                  :class="[showColumnsMenu ? 'absolute' : 'hidden']"
-                >
-                  <div class="overflow-y-auto space-y-2 pt-1">
-                    <div v-for="(c, i) in coloms" :key="i" class="px-2">
-                      <label class="flex items-center space-x-2 cursor-pointer select-none">
-                        <input type="checkbox" class="sr-only peer" />
-                        <div
-                          class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 relative"
-                        ></div>
-                        <span class="text-sm text-slate-300">{{ c }}</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div
-                    class="flex justify-between border-t border-slate-800 pt-3 px-2 text-sm text-blue-400 cursor-pointer"
-                  >
-                    <span class="hover:underline">Hide All</span>
-                    <span class="hover:underline">Show All</span>
-                  </div>
-                </div>
-              </div>
-
-              <label class="flex items-center space-x-2 cursor-pointer select-none">
-                <input type="checkbox" class="sr-only peer" />
-                <div
-                  class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 relative"
-                ></div>
-                <span class="text-sm text-slate-300">Only show running services</span>
-              </label>
-            </div>
-          </div>
-          <RouterLink
-            to="/add-service"
-            class="text-slate-900 bg-blue-600 rounded px-2 py-1 cursor-pointer transition-all duration-200 hover:bg-blue-800 hover:text-gray-900 font-semibold"
-          >
-            Add Service
-          </RouterLink>
+    <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div class="rounded-lg border border-slate-800 bg-[#10151A] p-4">
+        <span class="text-xs uppercase tracking-wide text-slate-400">Running</span>
+        <div class="mt-2 flex items-center gap-2">
+          <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+          <strong class="text-xl text-white">{{ counts.running }}</strong>
         </div>
-      </header>
+      </div>
+      <div class="rounded-lg border border-slate-800 bg-[#10151A] p-4">
+        <span class="text-xs uppercase tracking-wide text-slate-400">Stopped</span>
+        <div class="mt-2 flex items-center gap-2">
+          <span class="h-2.5 w-2.5 rounded-full bg-slate-500"></span>
+          <strong class="text-xl text-white">{{ counts.stopped }}</strong>
+        </div>
+      </div>
+      <div class="rounded-lg border border-slate-800 bg-[#10151A] p-4">
+        <span class="text-xs uppercase tracking-wide text-slate-400">Error</span>
+        <div class="mt-2 flex items-center gap-2">
+          <span class="h-2.5 w-2.5 rounded-full bg-red-500"></span>
+          <strong class="text-xl text-white">{{ counts.error }}</strong>
+        </div>
+      </div>
+    </div>
 
-      <!-- Content -->
-      <div class="mt-10">
-        <div>
-          <!-- Tabel -->
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm text-slate-300 border-collapse">
-              <thead>
-                <tr
-                  class="border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400"
-                >
-                  <th class="py-3 px-4 w-10"></th>
-                  <th class="py-3 px-4 font-medium">Name</th>
-                  <th class="py-3 px-4 font-medium">Port</th>
-                  <th class="py-3 px-4 font-medium">CPU</th>
-                  <th class="py-3 px-4 font-medium">Memory Usage</th>
-                  <th class="py-3 px-4 font-medium">Last Started</th>
-                  <th class="py-3 px-4 text-right font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-800/40">
-                <tr
-                  v-for="(r, i) in row"
-                  :key="i"
-                  class="hover:bg-white/[0.02] transition-colors group"
-                >
-                  <!-- Indikator Bulat -->
-                  <td class="py-3.5 px-4">
-                    <span class="inline-block w-2 h-2 rounded-full border border-slate-500"></span>
-                  </td>
-
-                  <!-- Data Kolom -->
-                  <td class="py-3.5 px-4 text-white font-normal">{{ r.name }}</td>
-                  <td class="py-3.5 px-4 text-slate-400 font-mono text-xs">{{ r.port }}</td>
-                  <td class="py-3.5 px-4 text-slate-400 font-mono text-xs">{{ r.cpu }}</td>
-                  <td class="py-3.5 px-4 text-slate-400 text-xs">{{ r.usageMemory }}</td>
-                  <td class="py-3.5 px-4 text-slate-500 text-xs">{{ r.lastStarted }}</td>
-
-                  <!-- Actions -->
-                  <td class="py-3.5 px-4 text-right space-x-3 text-slate-400">
-                    <button class="hover:text-blue-400 transition-colors" title="Start">
-                      <svg class="w-4 h-4 inline fill-current text-blue-500" viewBox="0 0 24 24">
-                        <path d="M5 3l14 9-14 9V3z" />
-                      </svg>
-                    </button>
-
-                    <!-- Dropdown Container dengan .stop agar tidak menutup template utama saat diklik -->
-                    <div class="inline relative" @click.stop>
-                      <button
-                        @click="toggleOptions(i)"
-                        class="cursor-pointer hover:text-white transition-colors p-1 hover:bg-slate-800 rounded-full"
-                      >
-                        <svg
-                          class="w-4 h-4 inline"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="1.5"
-                            d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                          ></path>
-                        </svg>
-                      </button>
-
-                      <!-- Dropdown Menu per Baris -->
-                      <div
-                        class="w-44 bg-slate-800 border border-slate-700 rounded shadow-xl top-6 right-0 z-50 p-1 space-y-1 text-left"
-                        :class="[activeDropdownIndex === i ? 'absolute' : 'hidden']"
-                      >
-                        <RouterLink
-                          to="/details/pid/service"
-                          class="w-full h-full block text-xs text-slate-300 hover:bg-slate-700 px-2 py-1.5 rounded cursor-pointer"
-                        >
-                          View Detail
-                        </RouterLink>
-                        <div
-                          class="text-xs text-slate-300 hover:bg-slate-700 px-2 py-1.5 rounded cursor-pointer"
-                        >
-                          Edit
-                        </div>
-                        <div
-                          class="text-xs text-slate-300 hover:bg-slate-700 px-2 py-1.5 rounded cursor-pointer"
-                        >
-                          Log
-                        </div>
-                      </div>
-                    </div>
-
-                    <button class="hover:text-red-400 transition-colors" title="Delete">
-                      <svg
-                        class="w-4 h-4 inline text-red-500/80"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="1.5"
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        ></path>
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+    <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <input
+          v-model="search"
+          type="search"
+          placeholder="Search services"
+          class="w-full max-w-sm rounded-md border border-slate-700 bg-[#080B0E] px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+        />
+        <div class="relative" @click.stop>
+          <button
+            class="rounded-md p-2 text-blue-400 hover:bg-slate-800"
+            title="Choose visible columns"
+            :aria-expanded="showColumnsMenu"
+            @click="showColumnsMenu = !showColumnsMenu"
+          >
+            <Columns3 class="h-5 w-5" />
+          </button>
+          <div
+            v-if="showColumnsMenu"
+            class="absolute left-0 top-10 z-20 w-48 rounded-md border border-slate-700 bg-[#10151A] p-2 shadow-xl"
+          >
+            <label
+              v-for="column in columns"
+              :key="column.key"
+              class="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
+            >
+              <input
+                type="checkbox"
+                :checked="visibleColumns.includes(column.key)"
+                class="accent-blue-500"
+                @change="toggleColumn(column.key)"
+              />
+              {{ column.label }}
+            </label>
           </div>
         </div>
       </div>
+      <label class="flex items-center gap-2 text-sm text-slate-300">
+        <input v-model="onlyRunning" type="checkbox" class="accent-blue-500" />
+        Only show running services
+      </label>
+    </div>
+
+    <p v-if="serviceStore.error" class="mt-4 text-sm text-red-400" role="alert">
+      {{ serviceStore.error }}
+    </p>
+
+    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-800">
+      <table class="w-full min-w-[760px] text-left text-sm">
+        <thead class="bg-[#080B0E] text-[11px] uppercase tracking-wider text-slate-400">
+          <tr>
+            <th class="px-4 py-3 font-medium">Service</th>
+            <th v-if="visibleColumns.includes('status')" class="px-4 py-3 font-medium">Status</th>
+            <th v-if="visibleColumns.includes('type')" class="px-4 py-3 font-medium">Type</th>
+            <th v-if="visibleColumns.includes('path')" class="px-4 py-3 font-medium">
+              Environment
+            </th>
+            <th v-if="visibleColumns.includes('pid')" class="px-4 py-3 font-medium">PID</th>
+            <th v-if="visibleColumns.includes('startedAt')" class="px-4 py-3 font-medium">
+              Last Started
+            </th>
+            <th class="px-4 py-3 text-right font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800/40">
+          <tr v-if="serviceStore.isLoading && !serviceStore.services.length">
+            <td
+              :colspan="2 + visibleColumns.length"
+              class="px-4 py-8 text-center text-sm text-slate-400"
+            >
+              Loading services...
+            </td>
+          </tr>
+          <tr v-else-if="!visibleServices.length">
+            <td
+              :colspan="2 + visibleColumns.length"
+              class="px-4 py-8 text-center text-sm text-slate-400"
+            >
+              {{
+                serviceStore.services.length
+                  ? 'No services match your search.'
+                  : 'No services linked yet.'
+              }}
+              <RouterLink
+                v-if="!serviceStore.services.length"
+                to="/add-service"
+                class="ml-1 text-blue-400 hover:underline"
+              >
+                Link a local service
+              </RouterLink>
+            </td>
+          </tr>
+          <tr
+            v-for="service in visibleServices"
+            :key="service.id"
+            class="transition-colors hover:bg-white/[0.02]"
+          >
+            <td class="px-4 py-3.5">
+              <div class="font-medium text-white">{{ service.name }}</div>
+            </td>
+            <td v-if="visibleColumns.includes('status')" class="px-4 py-3.5">
+              <span
+                class="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium"
+                :class="{
+                  'border-emerald-500/30 bg-emerald-500/10 text-emerald-400':
+                    service.status === 'running',
+                  'border-slate-500/30 bg-slate-500/10 text-slate-400':
+                    service.status === 'stopped',
+                  'border-red-500/30 bg-red-500/10 text-red-400': service.status === 'error',
+                }"
+                :title="service.lastError ?? undefined"
+              >
+                <span
+                  class="h-1.5 w-1.5 rounded-full"
+                  :class="{
+                    'bg-emerald-500': service.status === 'running',
+                    'bg-slate-500': service.status === 'stopped',
+                    'bg-red-500': service.status === 'error',
+                  }"
+                ></span>
+                {{ service.status }}
+              </span>
+              <p v-if="service.lastError" class="mt-1 max-w-xs text-xs text-red-400">
+                {{ service.lastError }}
+              </p>
+            </td>
+            <td
+              v-if="visibleColumns.includes('type')"
+              class="px-4 py-3.5 text-xs uppercase text-slate-400"
+            >
+              {{ service.serviceType }}
+            </td>
+            <td
+              v-if="visibleColumns.includes('path')"
+              class="max-w-[320px] px-4 py-3.5 font-mono text-xs text-slate-400"
+            >
+              <span class="block truncate" :title="service.path">{{ service.path }}</span>
+              <span v-if="service.executable" class="mt-1 block truncate text-slate-500">
+                {{ service.executable }}
+              </span>
+            </td>
+            <td
+              v-if="visibleColumns.includes('pid')"
+              class="px-4 py-3.5 font-mono text-xs text-slate-400"
+            >
+              {{ service.status === 'running' ? service.pid : '—' }}
+            </td>
+            <td
+              v-if="visibleColumns.includes('startedAt')"
+              class="px-4 py-3.5 text-xs text-slate-500"
+            >
+              {{ service.startedAt ? new Date(service.startedAt).toLocaleString() : '—' }}
+            </td>
+            <td class="px-4 py-3.5 text-right">
+              <div class="inline-flex items-center gap-2">
+                <button
+                  v-if="
+                    service.status === 'stopped' || (service.status === 'error' && !service.pid)
+                  "
+                  class="rounded px-2.5 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50"
+                  :disabled="serviceStore.isWorking"
+                  @click.stop="runAction('start', service)"
+                >
+                  Start
+                </button>
+                <button
+                  v-else
+                  class="rounded px-2.5 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/10 disabled:opacity-50"
+                  :disabled="serviceStore.isWorking"
+                  @click.stop="runAction('stop', service)"
+                >
+                  Stop
+                </button>
+                <div class="relative" @click.stop>
+                  <button
+                    class="rounded px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+                    :aria-expanded="activeDropdownId === service.id"
+                    @click="activeDropdownId = activeDropdownId === service.id ? null : service.id"
+                  >
+                    More
+                  </button>
+                  <div
+                    v-if="activeDropdownId === service.id"
+                    class="absolute right-0 top-9 z-20 w-36 rounded-md border border-slate-700 bg-slate-800 p-1 shadow-xl"
+                  >
+                    <button
+                      class="block w-full rounded px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-700"
+                      @click="edit(service)"
+                    >
+                      Edit folder
+                    </button>
+                    <button
+                      class="block w-full rounded px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-700"
+                      @click="openLogs(service)"
+                    >
+                      View logs
+                    </button>
+                    <button
+                      class="block w-full rounded px-2 py-1.5 text-left text-xs text-red-400 hover:bg-slate-700"
+                      @click="runAction('delete', service)"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div
+      v-if="editingService"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      @click.self="editingService = null"
+    >
+      <form
+        class="w-full max-w-xl space-y-4 rounded-lg border border-slate-700 bg-[#10151A] p-5 shadow-2xl"
+        @submit.prevent="saveEdit"
+        @click.stop
+      >
+        <h2 class="text-base font-semibold text-white">Edit {{ editingService.name }}</h2>
+        <div>
+          <label for="edit-service-path" class="mb-2 block text-sm text-slate-300">
+            Installation folder
+          </label>
+          <div class="flex gap-2">
+            <input
+              id="edit-service-path"
+              v-model.trim="editForm.path"
+              required
+              class="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#080B0E] px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              class="rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+              @click="browseEditFolder"
+            >
+              Browse
+            </button>
+          </div>
+        </div>
+        <label class="block">
+          <span class="mb-2 block text-sm text-slate-300">Executable (optional)</span>
+          <input
+            v-model.trim="editForm.executableName"
+            placeholder="Relative path, such as bin/nginx.exe"
+            class="w-full rounded-md border border-slate-700 bg-[#080B0E] px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+          />
+        </label>
+        <label class="block">
+          <span class="mb-2 block text-sm text-slate-300">Startup arguments (one per line)</span>
+          <textarea
+            v-model="editForm.argumentsText"
+            rows="3"
+            class="w-full rounded-md border border-slate-700 bg-[#080B0E] px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+          ></textarea>
+        </label>
+        <p v-if="serviceStore.error" class="text-sm text-red-400" role="alert">
+          {{ serviceStore.error }}
+        </p>
+        <div class="flex justify-end gap-2 border-t border-slate-800 pt-4">
+          <button
+            type="button"
+            class="rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
+            @click="editingService = null"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            :disabled="serviceStore.isWorking"
+            class="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+          >
+            Save changes
+          </button>
+        </div>
+      </form>
     </div>
   </MainTemplate>
 </template>

@@ -6,9 +6,12 @@ class Query:
 
   def __init__(self):
     self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    self.CONFIG_FILE = os.path.join(self.BASE_DIR, "config.json")
+    self.CONFIG_FILE = os.path.join(
+      os.environ.get("SYMEN_DATA_DIR", self.BASE_DIR), "config.json"
+    )
 
   def save_config(self, data):
+    os.makedirs(os.path.dirname(self.CONFIG_FILE), exist_ok=True)
     with open(self.CONFIG_FILE, "w") as f:
       json.dump(data, f, indent=4)
 

@@ -1,4 +1,5 @@
 from core.db.Query import Query
+from core.services.ServiceManager import ServiceManager
 import os
 import platform
 import psutil
@@ -99,4 +100,28 @@ class SettingsController(Query):
         return {
             "status": "ok",
             "data": config["theme"]
+        }
+
+    def startupArguments(self, payload=None):
+        service_manager = ServiceManager()
+        return {
+            "status": "ok",
+            "data": service_manager.load_startup_arguments_config(),
+            "path": str(service_manager.startup_arguments_file),
+        }
+
+    def setStartupArguments(self, payload=None):
+        if not isinstance(payload, dict) or "config" not in payload:
+            return {
+                "status": "error",
+                "message": "Startup arguments config is required",
+            }
+
+        service_manager = ServiceManager()
+        config = payload["config"]
+        service_manager.save_startup_arguments_config(config)
+        return {
+            "status": "ok",
+            "data": config,
+            "path": str(service_manager.startup_arguments_file),
         }

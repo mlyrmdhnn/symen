@@ -2,11 +2,12 @@ import electron from 'electron' // <-- Ubah ke default import
 import type { BrowserWindow as BrowserWindowInstance } from 'electron'
 import { execFile } from 'node:child_process'
 import { createConnection } from 'node:net'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
 // Ambil propertinya via destructuring dari objek default electron
-const { app, BrowserWindow, ipcMain } = electron
+const { app, BrowserWindow, dialog, ipcMain } = electron
 const runPython = promisify(execFile)
 
 let mainWindow: BrowserWindowInstance | null = null
@@ -31,11 +32,15 @@ async function waitForVite(): Promise<void> {
 }
 
 async function createWindow(): Promise<void> {
-  await waitForVite()
+  if (!app.isPackaged) await waitForVite()
 
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: path.join(
+      app.getAppPath(),
+      app.isPackaged ? 'dist/symen_logo.ico' : 'public/symen_logo.ico',
+    ),
     titleBarStyle: 'hidden',
     titleBarOverlay: {
       color: '#020617',
@@ -43,27 +48,59 @@ async function createWindow(): Promise<void> {
       height: 64,
     },
     webPreferences: {
-      preload: path.join(app.getAppPath(), 'src/electron/preload.cjs'),
+      preload: path.join(
+        app.getAppPath(),
+        app.isPackaged ? 'dist-electron/preload.cjs' : 'src/electron/preload.cjs',
+      ),
       contextIsolation: true,
       nodeIntegration: false,
     },
   })
 
+  ipcMain.on('update-theme-overlay', (_event, theme: 'dark' | 'light') => {
+    if (!mainWindow) return
+    if (theme == 'dark') {
+      mainWindow.setTitleBarOverlay({
+        color: '#020617',
+        symbolColor: '#94a3b8',
+        height: 64,
+      })
+    } else {
+      mainWindow.setTitleBarOverlay({
+        color: '#f8fafc',
+        symbolColor: '#475569',
+        height: 64,
+      })
+    }
+  })
+
   ipcMain.handle('backend-bridge', async (_event, data) => {
-    const backend = path.resolve(app.getAppPath(), '..', 'backend')
-    const python = path.join(backend, 'venv', 'Scripts', 'python.exe')
+    const backend = app.isPackaged
+      ? path.join(process.resourcesPath, 'backend')
+      : path.resolve(app.getAppPath(), '..', 'backend')
+    const executable = app.isPackaged
+      ? path.join(backend, 'symen-backend.exe')
+      : path.join(backend, 'venv', 'Scripts', 'python.exe')
     const script = path.join(backend, 'main.py')
-
-    // 'data' adalah objek request dari frontend (method, url, payload)
-    // Kita ubah jadi string JSON agar bisa ditangkap oleh sys.argv[1] di Python
     const jsonPayload = JSON.stringify(data)
+    const args = app.isPackaged ? [jsonPayload] : [script, jsonPayload]
 
-    // Kirim HANYA script path dan string JSON payload-nya
-    const { stdout } = await runPython(python, [script, jsonPayload], {
+    if (!existsSync(executable)) {
+      throw new Error(`Python backend executable was not found: ${executable}`)
+    }
+
+    const { stdout } = await runPython(executable, args, {
+      cwd: backend,
+      env: app.isPackaged
+        ? {
+            ...process.env,
+            SYMEN_DATA_DIR: app.getPath('userData'),
+            SYMEN_CONFIG_DIR: app.getPath('userData'),
+          }
+        : process.env,
       windowsHide: true,
     })
 
-    // Pastikan stdout tidak kosong sebelum di-parse
     if (!stdout || stdout.trim() === '') {
       throw new Error('Python backend tidak mengembalikan output apa pun (stdout kosong).')
     }
@@ -71,7 +108,28 @@ async function createWindow(): Promise<void> {
     return JSON.parse(stdout)
   })
 
-  await mainWindow.loadURL('http://127.0.0.1:5173')
+  ipcMain.handle('select-directory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+
+  ipcMain.handle('get-runtime-info', () => ({
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron,
+    chromiumVersion: process.versions.chrome,
+    nodeVersion: process.versions.node,
+    v8Version: process.versions.v8,
+    platform: process.platform,
+    architecture: process.arch,
+  }))
+
+  if (app.isPackaged) {
+    await mainWindow.loadFile(path.join(app.getAppPath(), 'dist/index.html'))
+  } else {
+    await mainWindow.loadURL('http://127.0.0.1:5173')
+  }
 }
 
 app
