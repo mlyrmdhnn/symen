@@ -1,0 +1,36 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans Variable', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', monospace;
+}
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  * {
+    @apply box-border;
+  }
+
+  html,
+  body,
+  #app {
+    @apply m-0 min-h-full;
+  }
+
+  html,
+  body {
+    overscroll-behavior: none !important;
+    overscroll-behavior-y: none !important;
+    overscroll-behavior-x: none !important;
+    touch-action: pan-x pan-y;
+    -webkit-user-drag: none;
+  }
+
+  body {
+    @apply font-sans antialiased;
+  }
+
+  svg {
+    @apply fill-none stroke-current;
+  }
+}
