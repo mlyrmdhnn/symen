@@ -31,16 +31,7 @@ const items = [
         >dockyard<span class="text-[#2496ED]">.</span></span
       >
     </RouterLink>
-    <div
-      v-if="isOpen"
-      class="mb-6 flex h-11 items-center gap-2 rounded-lg border border-slate-200 px-2 text-xs font-semibold dark:border-slate-700"
-    >
-      <span
-        class="grid size-7 place-items-center rounded-md bg-sky-50 text-[#2496ED] dark:bg-sky-950"
-        >S</span
-      >
-      <span class="flex-1">Symen workspace</span><span class="text-slate-400">⌄</span>
-    </div>
+
     <p v-if="isOpen" class="mb-2 px-2 text-[10px] font-bold tracking-widest text-slate-400">
       WORKSPACE
     </p>
@@ -65,16 +56,6 @@ const items = [
       </RouterLink>
     </nav>
     <div class="mt-auto">
-      <div
-        v-if="isOpen"
-        class="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950"
-      >
-        <span class="size-2 rounded-full bg-emerald-500"></span
-        ><span
-          ><strong class="block text-[10px]">Local environment</strong
-          ><small class="text-[9px] text-slate-500">Connected and healthy</small></span
-        >
-      </div>
       <button
         class="mb-3 flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
         type="button"

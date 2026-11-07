@@ -4,18 +4,18 @@ import MainTemplate from '@/template/MainTemplate.vue'
 
 type LogEntry = { time: string; level: 'INFO' | 'WARN' | 'ERROR'; service: string; message: string }
 const logs: LogEntry[] = [
-  { time: '18:21:42.083', level: 'INFO', service: 'api-gateway', message: 'GET /api/health 200 4ms' },
-  { time: '18:21:39.612', level: 'INFO', service: 'postgres-db', message: 'checkpoint complete: wrote 18 buffers' },
-  { time: '18:21:37.229', level: 'WARN', service: 'worker-queue', message: 'Job retry scheduled — attempt 2 of 5' },
-  { time: '18:21:34.005', level: 'INFO', service: 'redis-cache', message: 'Ready to accept connections tcp' },
-  { time: '18:21:31.847', level: 'ERROR', service: 'worker-queue', message: 'Connection timeout while reaching upstream' },
-  { time: '18:21:28.100', level: 'INFO', service: 'api-gateway', message: 'Upstream connection established' },
-  { time: '18:21:14.556', level: 'INFO', service: 'postgres-db', message: 'database system is ready to accept connections' },
-  { time: '18:20:58.301', level: 'WARN', service: 'api-gateway', message: 'Request rate approaching configured limit' },
-  { time: '18:20:45.772', level: 'INFO', service: 'redis-cache', message: 'Background saving terminated with success' },
-  { time: '18:20:32.914', level: 'INFO', service: 'api-gateway', message: 'GET /api/services 200 12ms' },
-  { time: '18:20:17.441', level: 'ERROR', service: 'worker-queue', message: 'Failed to process job — retrying' },
-  { time: '18:20:04.017', level: 'INFO', service: 'postgres-db', message: 'connection authorized: user=app database=symen' },
+  { time: '18:21:42.083', level: 'INFO', service: 'Nginx Web Server', message: 'GET /health 200 4ms' },
+  { time: '18:21:39.612', level: 'INFO', service: 'PostgreSQL Database', message: 'checkpoint complete: wrote 18 buffers' },
+  { time: '18:21:37.229', level: 'WARN', service: 'Node API', message: 'Retry scheduled — attempt 2 of 5' },
+  { time: '18:21:34.005', level: 'INFO', service: 'Redis Server', message: 'Ready to accept connections tcp' },
+  { time: '18:21:31.847', level: 'ERROR', service: 'Node API', message: 'Connection timeout while reaching upstream' },
+  { time: '18:21:28.100', level: 'INFO', service: 'Nginx Web Server', message: 'Upstream connection established' },
+  { time: '18:21:14.556', level: 'INFO', service: 'PostgreSQL Database', message: 'database system is ready to accept connections' },
+  { time: '18:20:58.301', level: 'WARN', service: 'Nginx Web Server', message: 'Request rate approaching configured limit' },
+  { time: '18:20:45.772', level: 'INFO', service: 'Redis Server', message: 'Background saving terminated with success' },
+  { time: '18:20:32.914', level: 'INFO', service: 'Nginx Web Server', message: 'GET /api/services 200 12ms' },
+  { time: '18:20:17.441', level: 'ERROR', service: 'Node API', message: 'Failed to process job — retrying' },
+  { time: '18:20:04.017', level: 'INFO', service: 'PostgreSQL Database', message: 'connection authorized: user=app database=symen' },
 ]
 const search = ref('')
 const level = ref('All levels')
@@ -41,10 +41,10 @@ const filteredLogs = computed(() => logs.filter((log) =>
 
     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <div class="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div><h2 class="text-xs font-bold text-slate-900 dark:text-white">Container output</h2><p class="mt-1 text-[9px] text-slate-500">Latest events from your local services</p></div>
+        <div><h2 class="text-xs font-bold text-slate-900 dark:text-white">Process output</h2><p class="mt-1 text-[9px] text-slate-500">Latest events from your local services</p></div>
         <div class="flex flex-wrap gap-2">
           <label><span class="sr-only">Filter by level</span><select v-model="level" class="h-8 rounded-md border border-slate-200 bg-white px-2 text-[10px] dark:border-slate-700 dark:bg-slate-900"><option>All levels</option><option>INFO</option><option>WARN</option><option>ERROR</option></select></label>
-          <label><span class="sr-only">Filter by service</span><select v-model="service" class="h-8 max-w-36 rounded-md border border-slate-200 bg-white px-2 text-[10px] dark:border-slate-700 dark:bg-slate-900"><option>All services</option><option>api-gateway</option><option>postgres-db</option><option>redis-cache</option><option>worker-queue</option></select></label>
+          <label><span class="sr-only">Filter by service</span><select v-model="service" class="h-8 max-w-36 rounded-md border border-slate-200 bg-white px-2 text-[10px] dark:border-slate-700 dark:bg-slate-900"><option>All services</option><option>Nginx Web Server</option><option>PostgreSQL Database</option><option>Redis Server</option><option>Node API</option></select></label>
           <label class="flex h-8 items-center gap-2 rounded-md border border-slate-200 px-2 text-slate-400 dark:border-slate-700">⌕<span class="sr-only">Search logs</span><input v-model="search" class="w-28 bg-transparent text-[10px] text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100" placeholder="Find in logs" /></label>
         </div>
       </div>

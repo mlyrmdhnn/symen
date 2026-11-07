@@ -2,43 +2,48 @@
 import { computed, reactive, ref } from 'vue'
 import MainTemplate from '@/template/MainTemplate.vue'
 import { useWorkspaceStore, type Service } from '@/stores/workspace'
-import { Pencil, Trash } from '@lucide/vue'
+import { Pencil, Play, Trash, Square } from '@lucide/vue'
 
 const workspace = useWorkspaceStore()
 const search = ref('')
-const filter = ref<'All' | 'Running' | 'Stopped'>('All')
 const modalOpen = ref(false)
 const editingId = ref<number>()
+const directoryInput = ref<HTMLInputElement>()
 const draft = reactive({
   name: '',
-  image: '',
-  tag: 'latest',
-  status: 'Running' as Service['status'],
-  ports: '',
+  executable: '',
+  directoryPath: '',
 })
 const filteredServices = computed(() =>
-  workspace.services.filter(
-    (item) =>
-      `${item.name} ${item.image} ${item.tag}`.toLowerCase().includes(search.value.toLowerCase()) &&
-      (filter.value === 'All' || item.status === filter.value),
+  workspace.services.filter((item) =>
+    `${item.name} ${item.executable} ${item.directoryPath}`
+      .toLowerCase()
+      .includes(search.value.toLowerCase()),
   ),
 )
 
 function openCreate() {
   editingId.value = undefined
-  Object.assign(draft, { name: '', image: '', tag: 'latest', status: 'Running', ports: '' })
+  Object.assign(draft, { name: '', executable: '', directoryPath: '' })
   modalOpen.value = true
 }
 function openEdit(service: Service) {
   editingId.value = service.id
   Object.assign(draft, {
     name: service.name,
-    image: service.image,
-    tag: service.tag,
-    status: service.status,
-    ports: service.ports,
+    executable: service.executable,
+    directoryPath: service.directoryPath,
   })
   modalOpen.value = true
+}
+function selectDirectory(event: Event) {
+  const input = event.currentTarget
+  if (!(input instanceof HTMLInputElement)) return
+
+  const selectedFile = input.files?.[0]
+  const directoryName = selectedFile?.webkitRelativePath.split('/')[0]
+  if (directoryName) draft.directoryPath = directoryName
+  input.value = ''
 }
 function submitService() {
   workspace.saveService({ ...draft }, editingId.value)
@@ -57,11 +62,11 @@ function removeService(service: Service) {
         <p
           class="mb-2 flex items-center gap-2 text-[10px] font-bold tracking-widest text-slate-500"
         >
-          <span class="h-0.5 w-4 bg-[#2496ED]"></span> CONTAINER MANAGEMENT
+          <span class="h-0.5 w-4 bg-[#2496ED]"></span> LOCAL DEVELOPMENT PROCESSES
         </p>
         <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Services</h1>
         <p class="mt-2 text-xs text-slate-500">
-          Manage the services running in your local environment.
+          Configure local development processes and their working directories.
         </p>
       </div>
       <button
@@ -73,12 +78,18 @@ function removeService(service: Service) {
       </button>
     </section>
 
-    <section class="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+    <section class="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-3">
       <div
         v-for="stat in [
           ['Total services', workspace.services.length],
-          ['Running', workspace.runningCount],
-          ['Stopped', workspace.services.length - workspace.runningCount],
+          [
+            'Executables configured',
+            workspace.services.filter((service) => service.executable).length,
+          ],
+          [
+            'Directories configured',
+            workspace.services.filter((service) => service.directoryPath).length,
+          ],
         ]"
         :key="stat[0]"
         class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
@@ -91,12 +102,6 @@ function removeService(service: Service) {
           ><strong class="text-base">{{ stat[1] }}</strong></span
         >
       </div>
-      <div
-        class="col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-semibold dark:border-slate-800 dark:bg-slate-900 xl:col-span-1"
-      >
-        <span class="size-2 rounded-full bg-emerald-500"></span> Local engine is healthy
-        <span class="ml-auto text-[9px] font-normal text-slate-500">Updated just now</span>
-      </div>
     </section>
 
     <section
@@ -105,31 +110,11 @@ function removeService(service: Service) {
       <div
         class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 dark:border-slate-800"
       >
-        <div class="flex gap-4">
-          <button
-            v-for="tab in ['All', 'Running', 'Stopped'] as const"
-            :key="tab"
-            class="border-b-2 py-4 text-[10px] font-semibold"
-            :class="
-              filter === tab
-                ? 'border-[#2496ED] text-[#1684d8]'
-                : 'border-transparent text-slate-500'
-            "
-            type="button"
-            @click="filter = tab"
-          >
-            {{ tab }}
-            <span
-              class="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] dark:bg-slate-800"
-              >{{
-                tab === 'All'
-                  ? workspace.services.length
-                  : tab === 'Running'
-                    ? workspace.runningCount
-                    : workspace.services.length - workspace.runningCount
-              }}</span
-            >
-          </button>
+        <div class="flex items-center gap-2 py-4 text-[10px] font-semibold text-[#1684d8]">
+          All services
+          <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] dark:bg-slate-800">{{
+            workspace.services.length
+          }}</span>
         </div>
         <label
           class="mb-2 flex h-8 items-center gap-2 rounded-md border border-slate-200 px-2 text-slate-400 dark:border-slate-700 sm:mb-0"
@@ -147,11 +132,10 @@ function removeService(service: Service) {
             class="bg-slate-50 text-[8px] font-bold tracking-wider text-slate-400 dark:bg-slate-950"
           >
             <tr>
-              <th class="px-4 py-3">SERVICE</th>
-              <th class="px-4 py-3">IMAGE</th>
-              <th class="px-4 py-3">STATUS</th>
-              <th class="px-4 py-3">PORTS</th>
-              <th class="px-4 py-3">CREATED</th>
+              <th class="px-4 py-3">Service</th>
+              <th class="px-4 py-3">Executable</th>
+              <th class="px-4 py-3">PID</th>
+              <th class="px-4 py-3">Port</th>
               <th class="px-4 py-3"></th>
             </tr>
           </thead>
@@ -165,26 +149,14 @@ function removeService(service: Service) {
                 <span class="flex items-center gap-2 font-bold"
                   ><span
                     class="grid size-8 place-items-center rounded-md border border-slate-200 bg-slate-50 text-[#2496ED] dark:border-slate-700 dark:bg-slate-800"
-                    >{{ service.image.slice(0, 1).toUpperCase() }}</span
+                    >{{ service.name.slice(0, 1).toUpperCase() }}</span
                   >{{ service.name }}</span
                 >
               </td>
               <td class="px-4 py-3 font-mono text-slate-600 dark:text-slate-300">
-                {{ service.image }}<span class="text-slate-400">:{{ service.tag }}</span>
+                {{ service.executable }}
               </td>
-              <td class="px-4 py-3">
-                <span
-                  :class="[
-                    'rounded-full px-2 py-1 text-[9px] font-bold',
-                    service.status === 'Running'
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800',
-                  ]"
-                  >● {{ service.status }}</span
-                >
-              </td>
-              <td class="px-4 py-3 font-mono text-slate-500">{{ service.ports }}</td>
-              <td class="px-4 py-3 text-slate-500">{{ service.created }}</td>
+              <td class="px-4 py-3 font-mono text-slate-500">{{ service.directoryPath }}</td>
               <td class="px-4 py-3">
                 <div class="flex justify-end gap-1">
                   <button
@@ -202,11 +174,20 @@ function removeService(service: Service) {
                   >
                     <Trash :size="20" />
                   </button>
+                  <button
+                    class="rounded px-2 py-1 text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all duration-200 cursor-pointer"
+                    type="button"
+                    aria-label="Delete service"
+                    @click="removeService(service)"
+                  >
+                    <Square :size="20" />
+                    <!-- <Play :size="20" /> -->
+                  </button>
                 </div>
               </td>
             </tr>
             <tr v-if="filteredServices.length === 0">
-              <td colspan="6" class="p-12 text-center text-xs text-slate-500">
+              <td colspan="4" class="p-12 text-center text-xs text-slate-500">
                 No services found.
                 <button class="font-bold text-[#1684d8]" type="button" @click="openCreate">
                   Add service
@@ -220,7 +201,7 @@ function removeService(service: Service) {
         class="flex flex-wrap justify-between gap-2 border-t border-slate-200 px-4 py-3 text-[9px] text-slate-500 dark:border-slate-800"
       >
         Showing {{ filteredServices.length }} of {{ workspace.services.length }} services
-        <span>● Mock data · Changes stay in this session</span>
+        <span>● Frontend preview · Changes stay in this session</span>
       </footer>
     </section>
 
@@ -251,46 +232,51 @@ function removeService(service: Service) {
           </button>
         </div>
         <p class="mb-5 mt-2 text-[10px] text-slate-500">
-          Configure a service for your local development workspace.
+          Configure a local executable and its working directory.
         </p>
         <label class="mb-3 grid gap-1.5 text-[10px] font-semibold"
           >Service name<input
             v-model.trim="draft.name"
             required
             maxlength="48"
-            placeholder="e.g. api-gateway"
+            placeholder="e.g. Nginx Web Server"
             class="h-9 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950"
         /></label>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <label class="mb-3 grid gap-1.5 text-[10px] font-semibold"
-            >Image<input
-              v-model.trim="draft.image"
+        <label class="mb-3 grid gap-1.5 text-[10px] font-semibold"
+          >Executable<input
+            v-model.trim="draft.executable"
+            required
+            placeholder="e.g. nginx.exe"
+            class="h-9 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950"
+        /></label>
+        <div class="mb-1 grid gap-1.5 text-[10px] font-semibold">
+          <label for="directory-path">Directory path</label>
+          <span class="flex gap-2">
+            <input
+              id="directory-path"
+              v-model.trim="draft.directoryPath"
               required
-              placeholder="e.g. nginx"
-              class="h-9 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950" /></label
-          ><label class="mb-3 grid gap-1.5 text-[10px] font-semibold"
-            >Tag<input
-              v-model.trim="draft.tag"
-              required
-              placeholder="latest"
-              class="h-9 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950"
-          /></label>
-        </div>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <label class="mb-3 grid gap-1.5 text-[10px] font-semibold"
-            >Status<select
-              v-model="draft.status"
-              class="h-9 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950"
+              placeholder="e.g. C:\tools\nginx"
+              class="h-9 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950"
+            />
+            <button
+              class="h-9 shrink-0 rounded-md border border-slate-200 px-3 text-[10px] font-semibold dark:border-slate-700"
+              type="button"
+              @click="directoryInput?.click()"
             >
-              <option>Running</option>
-              <option>Stopped</option>
-            </select></label
-          ><label class="mb-3 grid gap-1.5 text-[10px] font-semibold"
-            >Ports<input
-              v-model.trim="draft.ports"
-              placeholder="8080:80"
-              class="h-9 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950"
-          /></label>
+              Browse
+            </button>
+            <input
+              ref="directoryInput"
+              class="hidden"
+              type="file"
+              webkitdirectory
+              @change="selectDirectory"
+            />
+          </span>
+          <span class="font-normal text-slate-500">
+            Folder selection fills its name; enter the full path manually if needed.
+          </span>
         </div>
         <div
           class="mt-3 flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800"

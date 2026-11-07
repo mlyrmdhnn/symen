@@ -48,7 +48,7 @@ const themes: { value: ThemeMode; title: string; description: string }[] = [
               :key="theme.value"
               type="button"
               :class="[
-                'rounded-lg border p-2 text-left transition',
+                'rounded-lg border p-2 text-left cursor-pointer dark:hover:bg-slate-800 hover:bg-neutral-300 transition-all duration-200',
                 workspace.theme === theme.value
                   ? 'border-[#2496ED] ring-1 ring-[#2496ED]'
                   : 'border-slate-200 dark:border-slate-700',
@@ -162,7 +162,7 @@ const themes: { value: ThemeMode; title: string; description: string }[] = [
               >Dockyard <span class="ml-1 font-normal text-slate-500">v0.1.0</span></strong
             >
             <p class="mt-1 text-[9px] text-slate-500">
-              A calmer way to work with containers. Docker-inspired UI · Frontend preview.
+              A calmer way to manage local development processes · Frontend preview.
             </p>
           </div>
           <span

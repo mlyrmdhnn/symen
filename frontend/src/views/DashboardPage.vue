@@ -21,7 +21,7 @@ const services = computed(() => workspace.services.slice(0, 4))
           Good evening, Mungskiee <span class="text-[#2496ED]">✦</span>
         </h1>
         <p class="mt-2 text-xs text-slate-500">
-          Here’s what’s happening with your containers today.
+          Your local development services at a glance.
         </p>
       </div>
       <RouterLink
@@ -41,9 +41,9 @@ const services = computed(() => workspace.services.slice(0, 4))
             icon: '◫',
           },
           {
-            label: 'Running containers',
-            value: `${workspace.runningCount} / ${workspace.services.length}`,
-            detail: 'All systems go',
+            label: 'Configured executables',
+            value: workspace.services.filter((service) => service.executable).length,
+            detail: 'Ready for local setup',
             icon: '✓',
           },
           { label: 'CPU usage', value: '24.8%', detail: '↓ 4.2% from last hour', icon: '⌁' },
@@ -73,7 +73,7 @@ const services = computed(() => workspace.services.slice(0, 4))
         <div class="flex items-start justify-between p-4">
           <div>
             <h2 class="text-sm font-bold text-slate-900 dark:text-white">Services</h2>
-            <p class="mt-1 text-[10px] text-slate-500">Your containers at a glance</p>
+            <p class="mt-1 text-[10px] text-slate-500">Your local tools at a glance</p>
           </div>
           <RouterLink class="text-xs font-bold text-[#1684d8] hover:underline" to="/services"
             >View all →</RouterLink
@@ -86,25 +86,15 @@ const services = computed(() => workspace.services.slice(0, 4))
         >
           <span
             class="grid size-8 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-50 text-xs font-bold text-[#2496ED] dark:border-slate-700 dark:bg-slate-800"
-            >{{ service.image.slice(0, 1).toUpperCase() }}</span
+            >{{ service.name.slice(0, 1).toUpperCase() }}</span
           >
           <span class="min-w-0 flex-1"
             ><strong class="block truncate text-[11px] text-slate-900 dark:text-slate-100">{{
               service.name
             }}</strong
-            ><small class="font-mono text-[9px] text-slate-500"
-              >{{ service.image }}:{{ service.tag }}</small
+            ><small class="block truncate font-mono text-[9px] text-slate-500"
+              >{{ service.executable }} · {{ service.directoryPath }}</small
             ></span
-          >
-          <code class="hidden text-[9px] text-slate-500 sm:block">{{ service.ports }}</code>
-          <span
-            :class="[
-              'rounded-full px-2 py-1 text-[9px] font-bold',
-              service.status === 'Running'
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                : 'bg-slate-100 text-slate-500 dark:bg-slate-800',
-            ]"
-            >{{ service.status }}</span
           >
         </div>
         <RouterLink
@@ -123,10 +113,10 @@ const services = computed(() => workspace.services.slice(0, 4))
         </div>
         <div
           v-for="activity in [
-            ['✓', 'Container started', 'api-gateway is now running', '2 minutes ago'],
-            ['↓', 'Image pulled', 'postgres:16.2 downloaded successfully', '18 minutes ago'],
-            ['↻', 'Container restarted', 'worker-queue restarted by policy', '1 hour ago'],
-            ['■', 'Container stopped', 'minio-storage stopped manually', 'Yesterday'],
+            ['✓', 'Process configured', 'Nginx Web Server is ready for local setup', '2 minutes ago'],
+            ['⌕', 'Directory selected', 'PostgreSQL Database working folder updated', '18 minutes ago'],
+            ['↻', 'Executable updated', 'Node API now points to node.exe', '1 hour ago'],
+            ['＋', 'Service added', 'MinIO Storage added to this workspace', 'Yesterday'],
           ]"
           :key="activity[1]"
           class="flex gap-3 border-t border-slate-100 px-4 py-3 dark:border-slate-800"
