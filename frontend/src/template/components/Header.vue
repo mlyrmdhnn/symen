@@ -1,28 +1,30 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useWorkspaceStore } from '@/stores/workspace'
+
 defineProps<{ title: string }>()
+
+const workspace = useWorkspaceStore()
+const userInitial = computed(() => workspace.userName.charAt(0).toUpperCase() || 'U')
 </script>
 
 <template>
   <header
-    class="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8 dark:border-slate-800 dark:bg-slate-900"
+    class="flex h-16 shrink-0 items-center justify-between border-b border-subtle bg-elevated px-6 sm:px-8"
   >
-    <div class="flex items-center gap-2 text-xs text-slate-500">
-      <span>Workspace</span><span class="text-slate-300">/</span
-      ><strong class="text-slate-800 dark:text-slate-100">{{ title }}</strong>
+    <div class="flex items-center gap-2 text-sm text-muted">
+      <strong class="font-semibold tracking-tight text-primary">{{ title }}</strong>
     </div>
     <div class="flex items-center gap-3">
-      <div
-        class="flex items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold dark:border-slate-700"
-      >
-        <span class="size-1.5 rounded-full bg-emerald-500"></span> Local engine
-        <span class="text-slate-400">⌄</span>
-      </div>
       <button
-        class="grid size-7 place-items-center rounded-full bg-orange-200 text-[10px] font-bold text-orange-800"
+        class="grid size-9 place-items-center rounded-full border border-subtle bg-soft text-xs font-bold text-primary"
         aria-label="User menu"
       >
-        M
+        {{ userInitial }}
       </button>
+      <span class="text-sm font-medium text-primary">
+        {{ workspace.userName || 'User' }}
+      </span>
     </div>
   </header>
 </template>

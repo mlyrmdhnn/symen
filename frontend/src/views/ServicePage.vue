@@ -1,196 +1,296 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import MainTemplate from '@/template/MainTemplate.vue'
-import { useWorkspaceStore, type Service } from '@/stores/workspace'
 import { Pencil, Play, Trash, Square } from '@lucide/vue'
+import AddServiceCard from '@/components/AddServiceCard.vue'
+import DeleteServiceModal from '@/components/DeleteServiceModal.vue'
+import useService from '@/composables/useService'
+import EditServiceCard from '@/components/EditServiceCard.vue'
+import LoadingUI from '@/components/LoadingUI.vue'
+import useToast from '@/composables/useToast'
+const { showToast } = useToast()
 
-const workspace = useWorkspaceStore()
+const {
+  servicesData,
+  servicesExecute,
+  servicesError,
+  servicesPending,
+  getUpdatedData,
+  deleteService,
+  selectedDeleteId,
+  startService,
+  stopService,
+  loadingServiceId,
+  deleteModalOpen,
+  closeDeleteModal,
+} = useService()
+
 const search = ref('')
 const modalOpen = ref(false)
-const editingId = ref<number>()
-const directoryInput = ref<HTMLInputElement>()
-const draft = reactive({
+const selectedDeleteService = reactive({
+  id: '',
   name: '',
-  executable: '',
-  directoryPath: '',
 })
-const filteredServices = computed(() =>
-  workspace.services.filter((item) =>
-    `${item.name} ${item.executable} ${item.directoryPath}`
-      .toLowerCase()
-      .includes(search.value.toLowerCase()),
-  ),
-)
 
-function openCreate() {
-  editingId.value = undefined
-  Object.assign(draft, { name: '', executable: '', directoryPath: '' })
-  modalOpen.value = true
-}
-function openEdit(service: Service) {
-  editingId.value = service.id
-  Object.assign(draft, {
-    name: service.name,
-    executable: service.executable,
-    directoryPath: service.directoryPath,
-  })
-  modalOpen.value = true
-}
-function selectDirectory(event: Event) {
-  const input = event.currentTarget
-  if (!(input instanceof HTMLInputElement)) return
-
-  const selectedFile = input.files?.[0]
-  const directoryName = selectedFile?.webkitRelativePath.split('/')[0]
-  if (directoryName) draft.directoryPath = directoryName
-  input.value = ''
-}
-function submitService() {
-  workspace.saveService({ ...draft }, editingId.value)
+const closeModal = () => {
   modalOpen.value = false
 }
-function removeService(service: Service) {
-  if (window.confirm(`Delete "${service.name}" from this mock workspace?`))
-    workspace.deleteService(service.id)
+
+const openModal = () => {
+  modalOpen.value = true
 }
+
+const allServices = computed(() => servicesData.value ?? [])
+const runningCount = computed(() => allServices.value.filter((service) => service.is_run).length)
+const stoppedCount = computed(() => allServices.value.length - runningCount.value)
+const filteredServices = computed(() => {
+  const query = search.value.trim().toLowerCase()
+  if (!query) return allServices.value
+
+  return allServices.value.filter((service) =>
+    [service.name, service.executable, service.path, service.port, service.pid]
+      .join(' ')
+      .toLowerCase()
+      .includes(query),
+  )
+})
+
+const serviceStats = computed(() => [
+  { label: 'Total services', value: allServices.value.length, detail: 'Configured locally' },
+  { label: 'Running', value: runningCount.value, detail: 'Currently active' },
+  { label: 'Stopped', value: stoppedCount.value, detail: 'Ready to start' },
+])
+
+const openDeleteModal = (id: string, name: string, is_run: boolean) => {
+  if (is_run) {
+    showToast(
+      'warning',
+      `${name} still running`,
+      'Please stop the service before delete the service',
+    )
+    return
+  }
+
+  selectedDeleteService.name = name
+  selectedDeleteService.id = id
+  deleteModalOpen.value = true
+  selectedDeleteId.value = id
+}
+
+const showUpdateModal = ref(false)
+
+const openUpdateModal = (data: any, is_run: boolean, name: string) => {
+  if (is_run) {
+    showToast(
+      'info',
+      `${name} still running`,
+      'Please stop the service first before edit the service',
+    )
+    return
+  }
+  getUpdatedData(data)
+  showUpdateModal.value = true
+}
+
+onMounted(() => {
+  void servicesExecute()
+})
 </script>
 
 <template>
   <MainTemplate>
-    <section class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <AddServiceCard v-if="modalOpen" @close-modal="closeModal" />
+    <DeleteServiceModal
+      v-if="deleteModalOpen"
+      @close-delete-modal="closeDeleteModal"
+      :id="selectedDeleteService.id"
+      :name="selectedDeleteService.name"
+      @confirm-delete="deleteService"
+    />
+    <EditServiceCard v-if="showUpdateModal" @close-modal="showUpdateModal = false" />
+    <section class="mb-8 flex flex-wrap items-end justify-between gap-6">
       <div>
-        <p
-          class="mb-2 flex items-center gap-2 text-[10px] font-bold tracking-widest text-slate-500"
-        >
-          <span class="h-0.5 w-4 bg-[#2496ED]"></span> LOCAL DEVELOPMENT PROCESSES
+        <p class="mb-3 flex items-center gap-2 text-xs font-bold tracking-[0.16em] text-muted">
+          <span class="h-0.5 w-4 bg-accent"></span> LOCAL DEVELOPMENT PROCESSES
         </p>
-        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Services</h1>
-        <p class="mt-2 text-xs text-slate-500">
+        <h1 class="text-3xl font-semibold leading-tight tracking-tight text-primary">Services</h1>
+        <p class="mt-3 max-w-prose text-base leading-relaxed text-muted">
           Configure local development processes and their working directories.
         </p>
       </div>
       <button
-        class="rounded-md bg-[#2496ED] px-3 py-2 text-xs font-bold text-white hover:bg-[#1684d8]"
+        class="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg transition-colors duration-150 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
         type="button"
-        @click="openCreate"
+        @click="openModal"
       >
-        ＋ Add service
+        <span aria-hidden="true">＋</span>
+        Add service
       </button>
     </section>
 
-    <section class="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-3">
+    <section class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div
-        v-for="stat in [
-          ['Total services', workspace.services.length],
-          [
-            'Executables configured',
-            workspace.services.filter((service) => service.executable).length,
-          ],
-          [
-            'Directories configured',
-            workspace.services.filter((service) => service.directoryPath).length,
-          ],
-        ]"
-        :key="stat[0]"
-        class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+        v-for="stat in serviceStats"
+        :key="stat.label"
+        class="rounded-2xl border border-subtle bg-elevated p-6"
       >
-        <span
-          class="grid size-8 place-items-center rounded-lg bg-sky-50 text-[#2496ED] dark:bg-sky-950"
-          >◫</span
-        ><span
-          ><small class="block text-[9px] text-slate-500">{{ stat[0] }}</small
-          ><strong class="text-base">{{ stat[1] }}</strong></span
-        >
+        <p class="text-sm font-medium text-muted">{{ stat.label }}</p>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-primary tabular-nums">
+          {{ stat.value }}
+        </p>
+        <p class="mt-2 text-sm text-muted">{{ stat.detail }}</p>
       </div>
     </section>
 
-    <section
-      class="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-    >
+    <section class="overflow-hidden rounded-2xl border border-subtle bg-elevated">
       <div
-        class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 dark:border-slate-800"
+        class="flex flex-wrap items-center justify-between gap-4 border-b border-subtle px-6 py-5"
       >
-        <div class="flex items-center gap-2 py-4 text-[10px] font-semibold text-[#1684d8]">
-          All services
-          <span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] dark:bg-slate-800">{{
-            workspace.services.length
-          }}</span>
+        <div>
+          <h2 class="text-base font-semibold tracking-tight text-primary">All services</h2>
+          <p class="mt-1 text-sm text-muted">Manage and monitor your local processes.</p>
         </div>
         <label
-          class="mb-2 flex h-8 items-center gap-2 rounded-md border border-slate-200 px-2 text-slate-400 dark:border-slate-700 sm:mb-0"
-          >⌕<span class="sr-only">Search services</span
+          class="flex h-11 items-center gap-2 rounded-xl border border-subtle px-3 text-muted transition-colors duration-150 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20"
+          ><span aria-hidden="true">⌕</span><span class="sr-only">Search services</span
           ><input
             v-model="search"
-            class="w-40 bg-transparent text-[10px] text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
+            class="w-48 bg-transparent text-sm text-primary outline-none placeholder:text-muted"
             type="search"
             placeholder="Search services..."
         /></label>
       </div>
       <div class="overflow-x-auto">
-        <table class="w-full min-w-[700px] text-left text-[10px]">
-          <thead
-            class="bg-slate-50 text-[8px] font-bold tracking-wider text-slate-400 dark:bg-slate-950"
-          >
+        <table class="w-full min-w-[900px] text-left text-sm">
+          <thead class="bg-soft text-xs font-semibold tracking-wide text-muted">
             <tr>
-              <th class="px-4 py-3">Service</th>
-              <th class="px-4 py-3">Executable</th>
-              <th class="px-4 py-3">PID</th>
-              <th class="px-4 py-3">Port</th>
-              <th class="px-4 py-3"></th>
+              <th class="px-5 py-4">Service</th>
+              <th class="px-5 py-4">Executable</th>
+              <th class="px-5 py-4">Working directory</th>
+              <th class="px-5 py-4">Status</th>
+              <th class="px-5 py-4">Port</th>
+              <th class="px-5 py-4">PID</th>
+              <th class="px-5 py-4"><span class="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
             <tr
               v-for="service in filteredServices"
               :key="service.id"
-              class="border-t border-slate-100 dark:border-slate-800"
+              class="border-t border-subtle transition-colors duration-150 hover:bg-soft"
             >
-              <td class="px-4 py-3">
-                <span class="flex items-center gap-2 font-bold"
-                  ><span
-                    class="grid size-8 place-items-center rounded-md border border-slate-200 bg-slate-50 text-[#2496ED] dark:border-slate-700 dark:bg-slate-800"
-                    >{{ service.name.slice(0, 1).toUpperCase() }}</span
-                  >{{ service.name }}</span
-                >
+              <td class="px-5 py-4">
+                <span class="font-semibold text-primary">{{ service.name }}</span>
               </td>
-              <td class="px-4 py-3 font-mono text-slate-600 dark:text-slate-300">
+              <td class="px-5 py-4 font-mono text-xs text-muted">
                 {{ service.executable }}
               </td>
-              <td class="px-4 py-3 font-mono text-slate-500">{{ service.directoryPath }}</td>
-              <td class="px-4 py-3">
+              <td
+                class="max-w-[280px] truncate px-5 py-4 font-mono text-xs text-muted"
+                :title="service.path"
+              >
+                {{ service.path }}
+              </td>
+              <td class="px-5 py-4">
+                <span
+                  class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium"
+                  :class="
+                    service.is_run
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                      : 'bg-soft text-muted'
+                  "
+                >
+                  <span
+                    class="size-1.5 rounded-full"
+                    :class="service.is_run ? 'bg-emerald-500' : 'bg-slate-400'"
+                  ></span>
+                  {{ service.is_run ? 'Running' : 'Stopped' }}
+                </span>
+              </td>
+              <td class="px-5 py-4 font-mono text-xs text-muted tabular-nums">
+                {{ service.port || '—' }}
+              </td>
+              <td class="px-5 py-4 font-mono text-xs text-muted tabular-nums">
+                {{ service.pid || '—' }}
+              </td>
+              <td class="px-5 py-4">
                 <div class="flex justify-end gap-1">
                   <button
-                    class="rounded px-2 py-1 text-slate-500 hover:bg-slate-100 hover:text-[#1684d8] dark:hover:bg-slate-800 transition-all duration-200 cursor-pointer"
+                    class="grid size-9 place-items-center rounded-lg text-muted transition-colors duration-150 hover:bg-soft hover:text-accent focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
                     type="button"
                     aria-label="Edit service"
-                    @click="openEdit(service)"
+                    :disabled="loadingServiceId === service.id"
+                    @click="openUpdateModal(service, service.is_run, service.name)"
                   >
-                    <Pencil :size="20" /></button
-                  ><button
-                    class="rounded px-2 py-1 text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all duration-200 cursor-pointer"
-                    type="button"
-                    aria-label="Delete service"
-                    @click="removeService(service)"
-                  >
-                    <Trash :size="20" />
+                    <Pencil :size="16" />
                   </button>
                   <button
-                    class="rounded px-2 py-1 text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950 transition-all duration-200 cursor-pointer"
+                    class="grid size-9 place-items-center rounded-lg text-muted transition-colors duration-150 hover:bg-red-50 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-red-950"
                     type="button"
                     aria-label="Delete service"
-                    @click="removeService(service)"
+                    :disabled="loadingServiceId === service.id"
+                    :title="
+                      service.is_run ? 'Stop the service before deleting it' : 'Delete service'
+                    "
+                    @click="openDeleteModal(service.id, service.name, service.is_run)"
                   >
-                    <Square :size="20" />
-                    <!-- <Play :size="20" /> -->
+                    <Trash :size="16" />
+                  </button>
+                  <button
+                    class="grid size-9 place-items-center rounded-lg text-muted transition-colors duration-150 hover:bg-soft focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                    type="button"
+                    :aria-label="service.is_run ? 'Stop service' : 'Start service'"
+                    :disabled="loadingServiceId === service.id"
+                    @click="
+                      service.is_run
+                        ? stopService(service.id, service.pid)
+                        : startService(service.id)
+                    "
+                  >
+                    <template v-if="loadingServiceId === service.id">
+                      <LoadingUI class="w-8 h-8" />
+                    </template>
+                    <template v-else>
+                      <Square
+                        v-if="service.is_run"
+                        :size="16"
+                        class="cursor-pointer text-red-500"
+                      />
+                      <Play v-else :size="16" class="cursor-pointer text-accent" />
+                    </template>
                   </button>
                 </div>
               </td>
             </tr>
-            <tr v-if="filteredServices.length === 0">
-              <td colspan="4" class="p-12 text-center text-xs text-slate-500">
-                No services found.
-                <button class="font-bold text-[#1684d8]" type="button" @click="openCreate">
-                  Add service
+            <tr v-if="servicesPending">
+              <td colspan="7" class="p-12 text-center text-sm text-muted">
+                Loading your services…
+              </td>
+            </tr>
+            <tr v-else-if="servicesError">
+              <td colspan="7" class="p-12 text-center text-sm text-rose-600">
+                Unable to load services. Please try again.
+              </td>
+            </tr>
+            <tr v-else-if="filteredServices.length === 0">
+              <td colspan="7" class="p-12 text-center">
+                <p class="text-base font-medium text-primary">
+                  {{ search ? 'No matching services' : 'No services yet' }}
+                </p>
+                <p class="mt-2 text-sm text-muted">
+                  {{
+                    search
+                      ? 'Try another name, executable, or path.'
+                      : 'Add a service to manage it from Symen.'
+                  }}
+                </p>
+                <button
+                  v-if="!search"
+                  class="mt-4 font-semibold text-accent hover:underline focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
+                  type="button"
+                  @click="openModal"
+                >
+                  Add your first service
                 </button>
               </td>
             </tr>
@@ -198,103 +298,11 @@ function removeService(service: Service) {
         </table>
       </div>
       <footer
-        class="flex flex-wrap justify-between gap-2 border-t border-slate-200 px-4 py-3 text-[9px] text-slate-500 dark:border-slate-800"
+        class="flex flex-wrap justify-between gap-2 border-t border-subtle px-6 py-4 text-sm text-muted tabular-nums"
       >
-        Showing {{ filteredServices.length }} of {{ workspace.services.length }} services
-        <span>● Frontend preview · Changes stay in this session</span>
+        Showing {{ filteredServices.length }} of {{ allServices.length }} services
+        <span>{{ runningCount }} running · {{ stoppedCount }} stopped</span>
       </footer>
     </section>
-
-    <div
-      v-if="modalOpen"
-      class="fixed inset-0 z-10 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
-      @click.self="modalOpen = false"
-      @keydown.esc="modalOpen = false"
-    >
-      <form
-        class="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
-        @submit.prevent="submitService"
-      >
-        <div class="flex items-start justify-between">
-          <div>
-            <p class="mb-2 text-[9px] font-bold tracking-widest text-slate-500">
-              SERVICE CONFIGURATION
-            </p>
-            <h2 class="text-lg font-bold">{{ editingId ? 'Edit service' : 'Add a service' }}</h2>
-          </div>
-          <button
-            class="text-xl text-slate-400"
-            type="button"
-            aria-label="Close dialog"
-            @click="modalOpen = false"
-          >
-            ×
-          </button>
-        </div>
-        <p class="mb-5 mt-2 text-[10px] text-slate-500">
-          Configure a local executable and its working directory.
-        </p>
-        <label class="mb-3 grid gap-1.5 text-[10px] font-semibold"
-          >Service name<input
-            v-model.trim="draft.name"
-            required
-            maxlength="48"
-            placeholder="e.g. Nginx Web Server"
-            class="h-9 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950"
-        /></label>
-        <label class="mb-3 grid gap-1.5 text-[10px] font-semibold"
-          >Executable<input
-            v-model.trim="draft.executable"
-            required
-            placeholder="e.g. nginx.exe"
-            class="h-9 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950"
-        /></label>
-        <div class="mb-1 grid gap-1.5 text-[10px] font-semibold">
-          <label for="directory-path">Directory path</label>
-          <span class="flex gap-2">
-            <input
-              id="directory-path"
-              v-model.trim="draft.directoryPath"
-              required
-              placeholder="e.g. C:\tools\nginx"
-              class="h-9 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 font-normal dark:border-slate-700 dark:bg-slate-950"
-            />
-            <button
-              class="h-9 shrink-0 rounded-md border border-slate-200 px-3 text-[10px] font-semibold dark:border-slate-700"
-              type="button"
-              @click="directoryInput?.click()"
-            >
-              Browse
-            </button>
-            <input
-              ref="directoryInput"
-              class="hidden"
-              type="file"
-              webkitdirectory
-              @change="selectDirectory"
-            />
-          </span>
-          <span class="font-normal text-slate-500">
-            Folder selection fills its name; enter the full path manually if needed.
-          </span>
-        </div>
-        <div
-          class="mt-3 flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800"
-        >
-          <button
-            class="rounded-md border border-slate-200 px-3 py-2 text-[10px] font-semibold dark:border-slate-700"
-            type="button"
-            @click="modalOpen = false"
-          >
-            Cancel</button
-          ><button
-            class="rounded-md bg-[#2496ED] px-3 py-2 text-[10px] font-bold text-white"
-            type="submit"
-          >
-            {{ editingId ? 'Save changes' : 'Add service' }}
-          </button>
-        </div>
-      </form>
-    </div>
   </MainTemplate>
 </template>

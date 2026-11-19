@@ -1,80 +1,139 @@
 <script setup lang="ts">
-import { Bug, House, Settings, Terminal, Wrench } from '@lucide/vue'
-import { ref } from 'vue'
+import {
+  Bug,
+  House,
+  Settings,
+  Terminal,
+  Wrench,
+  CircleArrowLeft,
+  Component,
+  ArrowUpFromLine,
+} from '@lucide/vue'
+import { useWorkspaceStore } from '@/stores/workspace'
+import { ref, computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useAnimation } from '@/stores/animation'
+import { storeToRefs } from 'pinia'
+import LetterS from '@/components/LetterS.vue'
 
-const isOpen = ref(true)
-const items = [
-  { title: 'Dashboard', to: '/', icon: House },
-  { title: 'Services', to: '/services', icon: Wrench },
-  { title: 'Logs', to: '/logs', icon: Terminal },
-  { title: 'Settings', to: '/settings', icon: Settings },
-  { title: 'testing', to: '/tes', icon: Bug },
-]
+const animation = useAnimation()
+const { isOpen } = storeToRefs(animation)
+
+const workpasce = useWorkspaceStore()
+const userInitial = computed(() => workpasce.userName.charAt(0).toUpperCase() || 'U')
+
+const items = ref([
+  { title: 'Dashboard', to: '/', icon: House, isHover: false },
+  { title: 'Services', to: '/services', icon: Wrench, isHover: false },
+  { title: 'Logs', to: '/logs', icon: Terminal, isHover: false },
+  { title: 'Version', to: '/version', icon: ArrowUpFromLine, isHover: false },
+  { title: 'Settings', to: '/settings', icon: Settings, isHover: false },
+  { title: 'testing', to: '/setup', icon: Bug, isHover: false },
+])
 </script>
 
 <template>
   <aside
     :class="[
-      'flex min-h-screen shrink-0 flex-col border-r border-slate-200 bg-white px-3 py-5 transition-all dark:border-slate-800 dark:bg-slate-900',
+      'flex min-h-screen shrink-0 flex-col overflow-hidden border-r border-subtle bg-elevated px-3 py-6 transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]',
       isOpen ? 'w-60' : 'w-[68px]',
     ]"
   >
-    <RouterLink class="mb-8 flex items-center gap-2 px-2" to="/" aria-label="Dockyard home">
+    <RouterLink class="mb-10 flex items-center gap-3 px-2" to="/" aria-label="Dockyard home">
+      <!-- <span
+        class="grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-lg text-accent-fg"
+        >⚓</span -->
+      <LetterS class="size-9" />
       <span
-        class="grid size-9 shrink-0 place-items-center rounded-lg bg-[#2496ED] text-lg text-white"
-        >⚓</span
-      >
-      <span
-        v-if="isOpen"
-        class="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white"
-        >dockyard<span class="text-[#2496ED]">.</span></span
+        :class="[
+          'overflow-hidden whitespace-nowrap text-xl font-bold tracking-tight text-primary transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+          isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0',
+        ]"
+        >Symen<span class="text-accent">.</span></span
       >
     </RouterLink>
 
-    <p v-if="isOpen" class="mb-2 px-2 text-[10px] font-bold tracking-widest text-slate-400">
+    <p
+      :class="[
+        'overflow-hidden whitespace-nowrap px-2 text-[10px] font-bold tracking-[0.16em] text-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+        isOpen ? 'mb-3 max-h-5 opacity-100' : 'mb-0 max-h-0 opacity-0',
+      ]"
+    >
       WORKSPACE
     </p>
-    <nav class="grid gap-1" aria-label="Main navigation">
+
+    <nav class="grid gap-2" aria-label="Main navigation">
       <RouterLink
-        v-for="item in items"
+        v-for="(item, i) in items"
         :key="item.title"
         :to="item.to"
-        active-class="!bg-sky-50 !text-[#1684d8] dark:!bg-sky-950 dark:!text-sky-300"
-        class="flex h-10 items-center gap-3 rounded-lg px-3 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+        active-class="!bg-soft !text-primary"
+        class="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted transition-colors duration-200 hover:bg-soft hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
         :title="item.title"
+        @mouseenter="item.isHover = true"
+        @mouseleave="item.isHover = false"
       >
-        <span class="grid w-5 shrink-0 place-items-center text-base">
+        <div
+          v-if="!isOpen && item.isHover"
+          class="absolute left-16 -translate-y-1/2 text-sm px-3 py-1.5 rounded shadow-md whitespace-nowrap z-50 before:content-[''] before:absolute before:top-1/2 before:-translate-y-1/2 before:-left-2 before:border-y-[6px] before:border-y-transparent before:border-r-[8px] bg-surface"
+        >
+          {{ item.title }}
+        </div>
+
+        <span class="grid w-5 shrink-0 place-items-center">
           <component :size="20" :is="item.icon" />
         </span>
-        <span v-if="isOpen">{{ item.title }}</span>
         <span
-          v-if="isOpen && item.title === 'Services'"
-          class="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[10px] dark:bg-slate-800"
-          >6</span
+          :class="[
+            'overflow-hidden whitespace-nowrap transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+            isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0',
+          ]"
         >
+          {{ item.title }}
+        </span>
       </RouterLink>
     </nav>
+
     <div class="mt-auto">
       <button
-        class="mb-3 flex h-9 w-full items-center gap-3 rounded-lg px-3 text-left text-xs text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+        class="mb-4 flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm text-muted transition-colors duration-200 hover:bg-soft hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
         type="button"
         @click="isOpen = !isOpen"
       >
-        <span class="w-5 text-center">{{ isOpen ? '⇤' : '⇥' }}</span
-        ><span v-if="isOpen">Collapse sidebar</span>
-      </button>
-      <div
-        v-if="isOpen"
-        class="flex items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-800"
-      >
+        <span class="grid w-5 shrink-0 place-items-center">
+          <CircleArrowLeft
+            :class="[
+              'transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+              isOpen ? 'rotate-0' : 'rotate-180',
+            ]"
+          />
+        </span>
         <span
-          class="grid size-8 place-items-center rounded-full bg-orange-200 font-bold text-orange-800"
-          >M</span
-        ><span
-          ><strong class="block text-[10px]">Mungskiee</strong
-          ><small class="text-[9px] text-slate-500">Personal workspace</small></span
+          :class="[
+            'overflow-hidden whitespace-nowrap transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+            isOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0',
+          ]"
         >
+          Collapse sidebar
+        </span>
+      </button>
+
+      <div
+        :class="[
+          'flex items-center gap-3 overflow-hidden border-t border-subtle transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+          isOpen ? 'max-h-20 pt-4 opacity-100' : 'max-h-0 border-transparent pt-0 opacity-0',
+        ]"
+      >
+        <button
+          class="grid size-9 shrink-0 place-items-center rounded-full border border-subtle bg-soft text-xs font-bold text-primary"
+          aria-label="User menu"
+        >
+          {{ userInitial }}
+        </button>
+        <span class="whitespace-nowrap">
+          <strong class="block text-xs font-semibold">{{ workpasce.userName || 'User' }}</strong>
+          <small class="text-xs text-muted">Personal workspace</small>
+        </span>
       </div>
     </div>
   </aside>

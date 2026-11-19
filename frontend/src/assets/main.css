@@ -1,10 +1,55 @@
 @import 'tailwindcss';
 
-@theme {
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --surface: #faf7f2;
+  --elevated: #fffdf9;
+  --primary: #14213d;
+  --muted: rgba(20, 33, 61, 0.68);
+  --subtle: #e6dfd1;
+  --accent: #14213d;
+  --accent-fg: #f4ede0;
+  --soft: #f1ece3;
+  --overlay: rgba(20, 33, 61, 0.48);
+  --dialog-shadow: 0 16px 48px rgba(20, 33, 61, 0.12);
+  --chart-accent: #14213d;
+  --chart-muted: #e6dfd1;
+  --chart-text-color: #14213d;
+}
+
+.dark {
+  color-scheme: dark;
+  --surface: #0b0e11;
+  --elevated: #13171c;
+  --primary: #f4ede0;
+  --muted: rgba(244, 237, 224, 0.7);
+  --subtle: rgba(244, 237, 224, 0.12);
+  --accent: #f4ede0;
+  --accent-fg: #0b0e11;
+  --soft: #1b2027;
+  --overlay: rgba(6, 12, 24, 0.64);
+  --dialog-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+  --chart-accent: #f4ede0;
+  --chart-muted: #303740;
+  --chart-text-color: #f4ede0;
+}
+
+@theme inline {
   --font-sans: 'Plus Jakarta Sans Variable', sans-serif;
   --font-mono: 'JetBrains Mono Variable', monospace;
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-primary: var(--primary);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-soft: var(--soft);
+  --color-overlay: var(--overlay);
+  --shadow-dialog: var(--dialog-shadow);
 }
-@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   * {
@@ -27,29 +72,63 @@
   }
 
   body {
-    @apply font-sans antialiased;
+    @apply bg-surface font-sans antialiased text-primary;
   }
 
   svg {
     @apply fill-none stroke-current;
   }
 
-  /* === GLOBAL CUSTOM SCROLLBAR (Tauri Window) === */
   ::-webkit-scrollbar {
-    width: 2px;
-    height: 2px;
+    width: 8px;
+    height: 8px;
   }
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
+    background: color-mix(in srgb, var(--muted) 28%, transparent);
     border-radius: 9999px;
   }
+
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.5);
+    background: color-mix(in srgb, var(--muted) 52%, transparent);
   }
+
   ::-webkit-scrollbar-button {
     display: none;
+  }
+
+  button,
+  a,
+  input,
+  select {
+    transition-timing-function: ease-out;
+  }
+
+  button {
+    transition-property: color, background-color, border-color, opacity, transform;
+    transition-duration: 150ms;
+  }
+
+  button:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    outline-offset: 2px;
+  }
+
+  input,
+  select {
+    color: var(--primary);
+  }
+
+  ::selection {
+    color: var(--accent-fg);
+    background: var(--accent);
   }
 }

@@ -19,9 +19,13 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "backend",
-        "width": 800,
-        "height": 600
+        "title": "symen",
+        "width": 1200,
+        "height": 600,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true
       }
     ],
     "security": {

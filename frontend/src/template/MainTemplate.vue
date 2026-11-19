@@ -15,12 +15,12 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-screen overflow-hidden bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-200">
+  <div class="flex h-screen overflow-hidden bg-surface text-primary">
     <Sidebar />
     <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <Header :title="String(route.meta.title || 'Dashboard')" />
       <main class="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div class="mx-auto w-full max-w-[1480px] p-5 sm:p-8"><slot /></div>
+        <div class="mx-auto w-full max-w-[1480px] p-6 sm:p-8 lg:p-10"><slot /></div>
       </main>
     </div>
   </div>

@@ -1,0 +1,38 @@
+{
+  "global": {
+    "error": ["error", "fatal", "panic", "exception", "failed", "emerg", "crit"],
+    "warn": ["warn", "warning", "deprecated", "notice"]
+  },
+  "services": {
+    "httpd.exe": {
+      "category": "Web Server",
+      "error": [":error]", ":emerg]", ":crit]", "cannot load", "syntax error"],
+      "warn": [":warn]"],
+      "info": [":notice]", "resuming normal operations", "starting"]
+    },
+    "nginx.exe": {
+      "category": "Web Server",
+      "error": ["[emerg]", "[alert]", "[crit]", "[error]", "failed"],
+      "warn": ["[warn]"],
+      "info": ["[notice]", "[info]"]
+    },
+    "mysqld.exe": {
+      "category": "Database",
+      "error": ["[error]", "can't start server", "aborted"],
+      "warn": ["[warning]"],
+      "info": ["[note]", "ready for connections"]
+    },
+    "postgres.exe": {
+      "category": "Database",
+      "error": ["error:", "fatal:", "panic:"],
+      "warn": ["warning:", "hint:"],
+      "info": ["log:", "ready to accept connections"]
+    },
+    "php.exe": {
+      "category": "Language",
+      "error": ["fatal error", "parse error", "uncaught", " 500]"],
+      "warn": ["php warning", "php notice", "deprecated", " 404]", " 422]"],
+      "info": ["development server", "accepted", "closing", " 200]"]
+    }
+  }
+}

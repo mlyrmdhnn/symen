@@ -1,52 +1,33 @@
-use serde::Serialize;
+pub mod services;
+use std::sync::Mutex;
+use sysinfo::System;
 
-#[derive(Serialize)]
-struct SystemStats {
-    cpu_usage: f32,
-    ram_usage: f32,
-}
-
-#[derive(Serialize)]
-struct TestResponse {
-    status: String,
-    message: String,
-    code: u16,
-}
-
-
-
-// 1. method to tauri command
-#[tauri::command]
-fn get_stats() -> SystemStats {
-    SystemStats { cpu_usage: 12.5, ram_usage: 45.8 }
-}
-
-#[tauri::command]
-fn get_test() -> TestResponse {
-    TestResponse { 
-        status: "Success".to_string(), 
-        message: "Halo bre, ini dari backend Rust murni via Tauri IPC!".to_string(), 
-        code: 200 
-    }
-}
-
-#[tauri::command]
-fn post_test(message: String) -> Result<String, String> {
- println!("Payload dari fe diterima {}", message);
-
- // Verification to fe
- Ok(format!("Rust berhasil membalas : {}", message))
-}
+use services::service::{
+    add_service, delete_service, edit_name, edit_service, get_name, service_all, start_service,
+    stop_service,
+};
+use services::system::{SystemMonitorState, get_device_specs, get_system_info};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let mut sys = System::new().expect("Failed initializrd sysinfo");
+    sys.refresh_cpu_usage();
+
     tauri::Builder::default()
+        .manage(SystemMonitorState(Mutex::new(sys)))
         .plugin(tauri_plugin_opener::init())
-        // register plugin
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            get_stats, 
-            get_test,
-            post_test
+            add_service,
+            service_all,
+            edit_service,
+            delete_service,
+            start_service,
+            stop_service,
+            get_system_info,
+            get_device_specs,
+            edit_name,
+            get_name
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

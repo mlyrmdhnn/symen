@@ -1,46 +1,52 @@
-import { invoke } from '@tauri-apps/api/core'
 import { ref } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 
-interface Options<T> {
-  payload?: Record<string, unknown>
-  immediate?: boolean
+interface Options<TPayload = Record<string, any>> {
+  payload?: TPayload
   pick?: string
+  immediate?: boolean
+  initialData?: any
 }
 
-export function useInvoke<T = unknown>(method: string, options: Options<T> = {}) {
-  const { immediate = true, payload, pick } = options
+function CreateInvoke() {
+  function instance<TData = unknown, TPayload extends Record<string, any> = Record<string, any>>(
+    method: string,
+    options: Options<TPayload> = {},
+  ) {
+    const { payload, pick, immediate = true, initialData = null } = options
 
-  const data = ref<T | null>(null)
-  const error = ref<unknown | null>(null)
-  const pending = ref<boolean>(false)
+    const data = ref<TData | null>(initialData)
+    const pending = ref<boolean>(false)
+    const error = ref<string | Error | null>(null)
 
-  const execute = async (overridePayload?: Record<string, unknown>) => {
-    pending.value = true
-    error.value = null
+    async function execute(overridePayload?: TPayload) {
+      try {
+        pending.value = true
+        error.value = null
 
-    try {
-      const args = overridePayload || payload || {}
+        const finalPayload = overridePayload ?? payload ?? {}
+        const response = await invoke<TData>(method, finalPayload)
 
-      const response = await invoke<any>(method, args)
-
-      if (response !== undefined && response !== null) {
-        data.value = pick ? response[pick] : (response as T)
-      } else {
-        data.value = response
+        if (response !== undefined && response !== null) {
+          data.value = pick ? (response as any)[pick] : response
+        }
+      } catch (err: any) {
+        error.value = err
+      } finally {
+        pending.value = false
       }
-    } catch (err) {
-      error.value = err
-      console.error(`[IPC Error] ${method}:`, err)
-    } finally {
-      pending.value = false
     }
+
+    if (immediate) {
+      execute()
+    }
+
+    return { data, pending, error, execute }
   }
 
-  if (immediate) {
-    execute()
-  }
-
-  return { data, pending, error, execute }
+  return instance
 }
+
+const useInvoke = CreateInvoke()
 
 export default useInvoke
