@@ -18,15 +18,27 @@
     },
     "mysqld.exe": {
       "category": "Database",
-      "error": ["[error]", "can't start server", "aborted"],
-      "warn": ["[warning]"],
+      "error": ["[error]", "error:", "fatal", "can't start server", "aborted"],
+      "warn": ["[warning]", "warning:"],
       "info": ["[note]", "ready for connections"]
+    },
+    "pg_ctl.exe": {
+      "category": "Database",
+      "error": ["error:", "fatal:", "panic:", "could not start server", "failed"],
+      "warn": ["warning:", "hint:"],
+      "info": ["log:", "ready to accept connections", "server started"]
     },
     "postgres.exe": {
       "category": "Database",
       "error": ["error:", "fatal:", "panic:"],
       "warn": ["warning:", "hint:"],
       "info": ["log:", "ready to accept connections"]
+    },
+    "node.exe": {
+      "category": "Language",
+      "error": ["error", "fatal", "uncaught exception", "unhandledrejection"],
+      "warn": ["warning", "deprecated"],
+      "info": ["listening", "ready"]
     },
     "php.exe": {
       "category": "Language",

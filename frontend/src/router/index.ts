@@ -46,10 +46,6 @@ const router = createRouter({
       component: DownloadPage,
       meta: { title: 'Download' },
     },
-    {
-      path: '/tes',
-      component: LoadingPage,
-    },
   ],
 })
 

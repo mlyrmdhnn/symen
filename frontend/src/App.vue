@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import StartingLayer from './components/StartingLayer.vue'
 import ToastCard from './components/ToastCard.vue'
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import useInvoke from './lib/http.ts'
 import { useWorkspaceStore } from './stores/workspace'
 import useToast from './composables/useToast'
+import { useAppUpdater } from './composables/useAppUpdater'
 import router from './router/index.ts'
 
 const { data, error, execute } = useInvoke<{ name?: string } | null>('get_name', {
@@ -13,12 +14,37 @@ const { data, error, execute } = useInvoke<{ name?: string } | null>('get_name',
 
 const workspace = useWorkspaceStore()
 const { showToast } = useToast()
+const { checkForUpdates } = useAppUpdater()
 const showStarting = ref(true)
 const isNameExists = ref(true)
+
+function lockPageScroll() {
+  document.documentElement.style.overflow = 'hidden'
+  document.body.style.overflow = 'hidden'
+  window.scrollTo(0, 0)
+}
+
+function unlockPageScroll() {
+  document.documentElement.style.overflow = ''
+  document.body.style.overflow = ''
+}
+
+watch(
+  showStarting,
+  (visible) => {
+    if (visible) {
+      lockPageScroll()
+    }
+  },
+  { immediate: true, flush: 'sync' },
+)
+
+onBeforeUnmount(unlockPageScroll)
 
 workspace.applyTheme()
 
 onMounted(async () => {
+  void checkForUpdates({ silent: true })
   await execute()
 
   if (error.value) {
@@ -51,12 +77,12 @@ function handleNameSaved(name: string) {
 <template>
   <RouterView />
   <ToastCard />
-  <Transition name="fade">
+  <Transition name="fade" @after-leave="unlockPageScroll">
     <StartingLayer
       v-if="showStarting"
       :is-name-exists="isNameExists"
       @success="handleNameSaved"
-      class="absolute top-0"
+      class="fixed inset-0 z-50 overflow-hidden"
     />
   </Transition>
 </template>

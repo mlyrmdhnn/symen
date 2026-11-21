@@ -1,10 +1,62 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import LoadingUI from '@/components/LoadingUI.vue'
 import { open } from '@tauri-apps/plugin-dialog'
+import { useRouter } from 'vue-router'
+import useInvoke from '@/lib/http'
+
+export interface ServiceDetail {
+  id: string
+  name: string
+  channel: string
+  version: string
+  url: string
+  sha256: string | null
+  strip_prefix: string | null
+  bin_subpath: string
+  executable: string
+  default_port: number | null
+  needs_init: boolean
+  vc_redist_required: boolean
+  variant?: string | null
+  recommended_for?: string[] | null
+  cli_executable?: string | null
+  apache_module?: string | null
+}
+
+export interface ManifestInstance {
+  schema_version: number
+  updated_at: string
+  services: Record<string, ServiceDetail[]>
+}
+
+interface ServiceSetup {
+  key: string
+  label: string
+  packages: ServiceDetail[]
+  selectedId: string
+  path: string
+  progress: number
+  status: 'idle' | 'downloading' | 'installed'
+  installedPackageIds: string[]
+  cancelRequested: boolean
+  stage: 'downloading' | 'verifying' | 'extracting' | 'done' | null
+  error: string | null
+}
+
+interface DownloadProgress {
+  service_key: string
+  package_id: string
+  stage: 'downloading' | 'verifying' | 'extracting' | 'done'
+  progress: number
+}
+
+const { data, pending, error } = useInvoke<ManifestInstance>('get_service_manifest')
+const router = useRouter()
 
 const date = new Date()
-
 const dateTime = date
   .toLocaleDateString('en-US', {
     weekday: 'long',
@@ -14,78 +66,149 @@ const dateTime = date
   })
   .toUpperCase()
 
-interface ServiceSetup {
-  id: string
-  name: string
-  versions: string[]
-  selectedVersion: string
-  path: string
-  progress: number
-  status: 'idle' | 'downloading' | 'installed'
+const CATEGORY_ORDER = ['php', 'nginx', 'apache', 'node', 'mysql', 'postgresql']
+
+const CATEGORY_LABELS: Record<string, string> = {
+  php: 'PHP',
+  nginx: 'Nginx',
+  apache: 'Apache',
+  node: 'Node.js',
+  mysql: 'MySQL',
+  postgresql: 'PostgreSQL',
 }
 
-const services = ref<ServiceSetup[]>([
-  {
-    id: 'php',
-    name: 'PHP',
-    versions: ['8.5.0', '8.4.2', '8.3.14', '8.2.26'],
-    selectedVersion: '8.5.0',
-    path: 'C:\\symen\\bin\\php\\php-8.5.0',
-    progress: 35,
-    status: 'downloading',
-  },
-  {
-    id: 'nginx',
-    name: 'Nginx',
-    versions: ['1.27.3', '1.26.2', '1.24.0'],
-    selectedVersion: '1.27.3',
-    path: 'C:\\symen\\bin\\nginx\\nginx-1.27.3',
-    progress: 0,
-    status: 'idle',
-  },
-  {
-    id: 'mysql',
-    name: 'MySQL',
-    versions: ['9.1.0', '8.4.3', '8.0.40'],
-    selectedVersion: '8.4.3',
-    path: 'C:\\symen\\bin\\mysql\\mysql-8.4.3',
-    progress: 100,
-    status: 'installed',
-  },
-  {
-    id: 'nodejs',
-    name: 'Node.js',
-    versions: ['22.11.0 LTS', '23.3.0', '20.18.1 LTS'],
-    selectedVersion: '22.11.0 LTS',
-    path: 'C:\\symen\\bin\\node\\v22.11.0',
-    progress: 0,
-    status: 'idle',
-  },
-])
+const services = ref<ServiceSetup[]>([])
 
-// Update otomatis folder path saat versi diganti
+// Map data manifest dari Rust ke state UI saat berhasil di-load
+watch(
+  data,
+  (manifest) => {
+    if (!manifest?.services) return
+
+    services.value = CATEGORY_ORDER.flatMap((key) => {
+      const packages = manifest.services[key]
+      const defaultPkg = packages?.[0]
+      if (!packages?.length || !defaultPkg) return []
+
+      return [
+        {
+          key,
+          label: CATEGORY_LABELS[key] ?? key.toUpperCase(),
+          packages,
+          selectedId: defaultPkg.id,
+          path: `C:\\symen\\bin\\${key}\\${defaultPkg.id}`,
+          progress: 0,
+          status: 'idle',
+          installedPackageIds: [],
+          cancelRequested: false,
+          stage: null,
+          error: null,
+        },
+      ]
+    })
+  },
+  { immediate: true },
+)
+
+const selectedPackage = (service: ServiceSetup): ServiceDetail | undefined => {
+  return service.packages.find((pkg) => pkg.id === service.selectedId)
+}
+
+// Update otomatis folder path saat pilihan versi/varian di dropdown diganti
 const handleVersionChange = (service: ServiceSetup) => {
-  const cleanVersion = service.selectedVersion.split(' ')[0]
-  const baseFolder = service.path.substring(0, service.path.lastIndexOf('\\'))
-  const prefix = service.id === 'nodejs' ? 'v' : `${service.id}-`
-  service.path = `${baseFolder}\\${prefix}${cleanVersion}`
+  const pkg = selectedPackage(service)
+  if (!pkg) return
+
+  const lastSlashIdx = service.path.lastIndexOf('\\')
+  const baseFolder =
+    lastSlashIdx !== -1 ? service.path.substring(0, lastSlashIdx) : `C:\\symen\\bin\\${service.key}`
+
+  service.path = `${baseFolder}\\${pkg.id}`
+  const isInstalled = service.installedPackageIds.includes(pkg.id)
+  service.status = isInstalled ? 'installed' : 'idle'
+  service.progress = isInstalled ? 100 : 0
+  service.stage = isInstalled ? 'done' : null
+  service.error = null
 }
 
-// Simulasi dummy progress download saat tombol diklik
-const startDownload = (service: ServiceSetup) => {
+let unlistenProgress: UnlistenFn | undefined
+
+onMounted(async () => {
+  unlistenProgress = await listen<DownloadProgress>('download-progress', ({ payload }) => {
+    const service = services.value.find(
+      (item) => item.key === payload.service_key && item.selectedId === payload.package_id,
+    )
+    if (!service) return
+
+    service.progress = payload.progress
+    service.stage = payload.stage
+    if (payload.stage === 'done') {
+      service.cancelRequested = false
+      if (!service.installedPackageIds.includes(payload.package_id)) {
+        service.installedPackageIds.push(payload.package_id)
+      }
+      service.status = 'installed'
+      service.error = null
+    } else {
+      if (payload.stage === 'extracting') {
+        service.installedPackageIds = service.installedPackageIds.filter(
+          (id) => id !== payload.package_id,
+        )
+      }
+      service.status = 'downloading'
+    }
+  })
+})
+
+onBeforeUnmount(() => {
+  unlistenProgress?.()
+})
+
+const startDownload = async (service: ServiceSetup) => {
   if (service.status === 'downloading') return
+  const packageDetail = selectedPackage(service)
+  if (!packageDetail) return
 
   service.status = 'downloading'
   service.progress = 0
-
-  const interval = setInterval(() => {
-    service.progress += Math.floor(Math.random() * 18) + 8
-    if (service.progress >= 100) {
-      service.progress = 100
-      service.status = 'installed'
-      clearInterval(interval)
+  service.cancelRequested = false
+  service.stage = 'downloading'
+  service.error = null
+  try {
+    await invoke('install_service_package', {
+      serviceKey: service.key,
+      package: packageDetail,
+      targetPath: service.path,
+    })
+  } catch (err) {
+    const stillInstalled = service.installedPackageIds.includes(packageDetail.id)
+    service.status = stillInstalled ? 'installed' : 'idle'
+    service.progress = stillInstalled ? 100 : 0
+    service.stage = stillInstalled ? 'done' : null
+    if (!service.cancelRequested) {
+      service.error = err instanceof Error ? err.message : String(err)
     }
-  }, 350)
+    service.cancelRequested = false
+  }
+}
+
+const cancelDownload = async (service: ServiceSetup) => {
+  if (service.status !== 'downloading' || service.stage !== 'downloading') return
+
+  const packageDetail = selectedPackage(service)
+  if (!packageDetail) return
+
+  service.cancelRequested = true
+  service.error = null
+  try {
+    await invoke('cancel_service_package', {
+      serviceKey: service.key,
+      packageId: packageDetail.id,
+    })
+  } catch (err) {
+    service.cancelRequested = false
+    service.error = err instanceof Error ? err.message : String(err)
+  }
 }
 
 const selectFolder = async (service: ServiceSetup): Promise<void> => {
@@ -94,7 +217,7 @@ const selectFolder = async (service: ServiceSetup): Promise<void> => {
       directory: true,
       multiple: false,
       defaultPath: service.path,
-      title: `Pilih Folder Instalasi ${service.name}`,
+      title: `Pilih Folder Instalasi ${service.label}`,
     })
 
     if (typeof selectedPath === 'string') {
@@ -102,6 +225,30 @@ const selectFolder = async (service: ServiceSetup): Promise<void> => {
     }
   } catch (err) {
     console.error('Gagal memilih folder:', err)
+  }
+}
+
+const manifestUpdatedAt = computed(() => data.value?.updated_at ?? null)
+const isDownloading = computed(() =>
+  services.value.some((service) => service.status === 'downloading'),
+)
+const installedCount = computed(
+  () => services.value.filter((service) => service.installedPackageIds.length > 0).length,
+)
+const canFinish = computed(() => !isDownloading.value && installedCount.value > 0)
+
+const stageLabel = (stage: ServiceSetup['stage']): string => {
+  switch (stage) {
+    case 'downloading':
+      return 'Downloading...'
+    case 'verifying':
+      return 'Verifying SHA256...'
+    case 'extracting':
+      return 'Extracting...'
+    case 'done':
+      return 'Installed'
+    default:
+      return ''
   }
 }
 </script>
@@ -119,43 +266,59 @@ const selectFolder = async (service: ServiceSetup): Promise<void> => {
         </h1>
         <p class="mt-3 max-w-2xl text-base leading-relaxed text-muted">
           You can manually configure the path that you put the services too.
+          <span v-if="manifestUpdatedAt" class="ml-1 font-mono text-xs text-muted/80">
+            (Registry: {{ manifestUpdatedAt }})
+          </span>
         </p>
       </div>
 
-      <!-- Main Container Card (Sesuai kotak besar di sketsa) -->
+      <!-- Main Container Card -->
       <div class="mt-8 rounded-2xl border border-subtle bg-elevated p-5 sm:p-6">
-        <div class="divide-y divide-subtle">
-          <div
-            v-for="(service, index) in services"
-            :key="service.id"
-            class="py-5 first:pt-0 last:pb-0"
-          >
+        <!-- Loading State -->
+        <div v-if="pending && services.length === 0" class="flex items-center justify-center py-12">
+          <div class="flex items-center gap-3 text-sm text-muted">
+            <LoadingUI />
+            <span>Loading service registry...</span>
+          </div>
+        </div>
+
+        <!-- Error State -->
+        <div
+          v-else-if="error && services.length === 0"
+          class="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-xs text-red-400"
+        >
+          Failed to load manifest: {{ error }}
+        </div>
+
+        <!-- Service List -->
+        <div v-else class="divide-y divide-subtle">
+          <div v-for="service in services" :key="service.key" class="py-5 first:pt-0 last:pb-0">
             <!-- Top Row: Nama Service | Mini Select Versi | Input Path | Tombol Download -->
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <!-- Kiri: Nama Service + Mini Select Option Versi -->
               <div class="flex items-center gap-3">
-                <span class="min-w-20 text-base font-semibold tracking-tight text-primary">
-                  {{ service.name }}
+                <span class="min-w-24 text-base font-semibold tracking-tight text-primary">
+                  {{ service.label }}
                 </span>
 
                 <!-- Select Option Mini -->
                 <div class="relative">
                   <select
-                    v-model="service.selectedVersion"
+                    v-model="service.selectedId"
                     @change="handleVersionChange(service)"
                     :disabled="service.status === 'downloading'"
                     class="h-8 appearance-none rounded-lg border border-subtle bg-soft pl-2.5 pr-7 text-xs font-medium text-primary transition-colors hover:border-primary/30 focus:border-accent focus:outline-none disabled:opacity-50 cursor-pointer"
                   >
                     <option
-                      v-for="ver in service.versions"
-                      :key="ver"
-                      :value="ver"
+                      v-for="pkg in service.packages"
+                      :key="pkg.id"
+                      :value="pkg.id"
                       class="bg-elevated text-primary"
                     >
-                      {{ ver }}
+                      {{ pkg.name }}
                     </option>
                   </select>
-                  <!-- Custom Chevron Icon -->
+
                   <svg
                     class="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted"
                     viewBox="0 0 24 24"
@@ -170,9 +333,7 @@ const selectFolder = async (service: ServiceSetup): Promise<void> => {
                 </div>
               </div>
 
-              <!-- Kanan: Input Path + Tombol Download -->
               <div class="flex flex-1 flex-col gap-2.5 sm:flex-row sm:items-center lg:max-w-2xl">
-                <!-- Input Path -->
                 <div class="relative flex-1">
                   <input
                     readonly
@@ -181,25 +342,45 @@ const selectFolder = async (service: ServiceSetup): Promise<void> => {
                     type="text"
                     placeholder="Service installation path..."
                     :disabled="service.status === 'downloading'"
-                    class="h-9 w-full rounded-lg border border-subtle bg-surface px-3 font-mono text-xs text-primary placeholder:text-muted/50 transition-colors focus:border-accent focus:outline-none disabled:opacity-60"
+                    class="h-9 w-full rounded-lg border border-subtle bg-surface px-3 font-mono text-xs text-primary placeholder:text-muted/50 transition-colors focus:border-accent focus:outline-none disabled:opacity-60 cursor-pointer"
                   />
                 </div>
 
-                <!-- Tombol Download -->
                 <button
                   type="button"
-                  @click="startDownload(service)"
-                  :disabled="service.status === 'downloading'"
+                  @click="
+                    service.status === 'downloading'
+                      ? cancelDownload(service)
+                      : startDownload(service)
+                  "
+                  :disabled="
+                    service.status === 'downloading' &&
+                    (service.stage !== 'downloading' || service.cancelRequested)
+                  "
                   class="inline-flex h-9 w-max shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 text-xs font-semibold transition-all duration-150 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none cursor-pointer disabled:cursor-not-allowed"
                   :class="
-                    service.status === 'installed'
-                      ? 'border border-subtle bg-soft text-primary hover:border-primary/30'
-                      : 'bg-accent text-accent-fg hover:opacity-90 disabled:opacity-70'
+                    service.status === 'downloading'
+                      ? 'border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-70'
+                      : service.status === 'installed'
+                        ? 'border border-subtle bg-soft text-primary hover:border-primary/30'
+                        : 'bg-accent text-accent-fg hover:opacity-90 disabled:opacity-70'
                   "
                 >
-                  <!-- Icon Download -->
                   <svg
-                    v-if="service.status !== 'installed'"
+                    v-if="service.status === 'downloading' && service.stage === 'downloading'"
+                    class="h-3.5 w-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                  <svg
+                    v-else-if="service.status !== 'installed'"
                     class="h-3.5 w-3.5"
                     viewBox="0 0 24 24"
                     fill="none"
@@ -229,7 +410,11 @@ const selectFolder = async (service: ServiceSetup): Promise<void> => {
                   <span>
                     {{
                       service.status === 'downloading'
-                        ? `${service.progress}%`
+                        ? service.cancelRequested
+                          ? 'Cancelling...'
+                          : service.stage === 'downloading'
+                            ? 'Cancel'
+                            : `${service.progress}%`
                         : service.status === 'installed'
                           ? 'Reinstall'
                           : 'Download'
@@ -257,19 +442,39 @@ const selectFolder = async (service: ServiceSetup): Promise<void> => {
                 </span>
               </div>
             </div>
+            <div v-if="service.error" class="mt-2 text-xs text-red-400" role="alert">
+              {{ service.error }}
+            </div>
+            <div v-else-if="service.stage" class="mt-2 text-xs text-muted" aria-live="polite">
+              {{ stageLabel(service.stage) }}
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Footer Action -->
-      <div class="mt-6 flex items-center justify-end">
-        <routerLink
-          to="/"
+      <div class="mt-6 flex items-center justify-end gap-2">
+        <button
+          :disabled="isDownloading"
+          class="inline-flex min-h-11 w-max items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-accent-fg transition-opacity duration-150 hover:opacity-90"
+          @click="router.push('/setup')"
+          :class="[
+            isDownloading ? ' cursor-not-allowed opacity-50 pointer-events-none' : 'cursor-pointer',
+          ]"
+        >
+          Back
+        </button>
+        <button
           type="button"
-          class="inline-flex min-h-11 w-max items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-accent-fg transition-opacity duration-150 hover:opacity-90 cursor-pointer"
+          :disabled="!canFinish"
+          @click="router.push('/')"
+          class="inline-flex min-h-11 w-max items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-accent-fg transition-opacity duration-150 hover:opacity-90"
+          :class="
+            canFinish ? 'cursor-pointer' : 'opacity-50 pointer-events-none cursor-not-allowed'
+          "
         >
           Finish & Go to Dashboard
-        </routerLink>
+        </button>
       </div>
     </div>
   </div>

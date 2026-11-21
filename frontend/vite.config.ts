@@ -15,6 +15,9 @@ export default defineConfig({
   },
   build: {
     target: 'es2021',
+    outDir: '../backend/src',
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
   },
   resolve: {
     alias: {

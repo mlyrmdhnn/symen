@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import MainTemplate from '@/template/MainTemplate.vue'
+import useInvoke from '@/lib/http'
+import { useAppUpdater } from '@/composables/useAppUpdater'
+
+type RawRelease = {
+  latest_version: string
+  download_url: string
+  release_date: string
+  compatibility: string
+  about_version: string[]
+}
 
 type Release = {
   version: string
@@ -9,117 +19,162 @@ type Release = {
   compatibility: string
   summary: string
   notes: string[]
+  downloadUrl: string
 }
 
-type UpdateResult = 'available' | 'latest' | 'installed' | null
+const { data, pending, error: versionListError } = useInvoke<RawRelease[]>('get_versions')
+const {
+  checking,
+  available,
+  checked,
+  version: updateVersion,
+  notes: updateNotes,
+  date: updateDate,
+  currentVersion,
+  downloading,
+  downloadedBytes,
+  totalBytes,
+  progress,
+  error: updateError,
+  checkForUpdates,
+  installUpdate,
+} = useAppUpdater()
 
-const releases: [Release, ...Release[]] = [
-  {
-    version: 'v2.2.0',
-    releasedAt: 'November 12, 2026',
-    channel: 'Stable',
-    compatibility: 'Windows 10 or later · x64 / ARM64',
-    summary: 'A faster, more flexible workspace for your local development tools.',
-    notes: [
-      'Added configurable startup profiles for local services.',
-      'Improved process output filtering and search.',
-      'Reduced workspace launch time and memory use.',
-    ],
-  },
-  {
-    version: 'v2.1.0',
-    releasedAt: 'October 28, 2026',
-    channel: 'Stable',
-    compatibility: 'Windows 10 or later · x64',
-    summary: 'Introduces service groups and a clearer process overview.',
-    notes: [
-      'Group related services into reusable workspaces.',
-      'Added live process status indicators.',
-      'Improved keyboard navigation across the app.',
-    ],
-  },
-  {
-    version: 'v2.0.4',
-    releasedAt: 'October 10, 2026',
-    channel: 'Stable',
-    compatibility: 'Windows 10 or later · x64',
-    summary: 'A maintenance release focused on stability and polish.',
-    notes: [
-      'Fixed service paths containing spaces.',
-      'Resolved a theme preference issue on startup.',
-      'Improved error messages for unavailable executables.',
-    ],
-  },
-  {
-    version: 'v2.0.1',
-    releasedAt: 'September 30, 2026',
-    channel: 'Stable',
-    compatibility: 'Windows 10 or later · x64',
-    summary: 'Small fixes following the Symen 2.0 release.',
-    notes: [
-      'Fixed an issue when editing a saved service.',
-      'Improved layout behavior on narrow windows.',
-    ],
-  },
-  {
-    version: 'v2.0.0',
-    releasedAt: 'September 24, 2026',
-    channel: 'Stable',
-    compatibility: 'Windows 10 or later · x64',
-    summary: 'A refreshed Symen experience built for local development.',
-    notes: [
-      'Introduced the new workspace navigation and visual system.',
-      'Added local service configuration and activity views.',
-    ],
-  },
-]
+const fallbackRelease: Release = {
+  version: 'v2.0.0',
+  releasedAt: 'November 21, 2026',
+  channel: 'Stable',
+  compatibility: 'Windows 10 or later (x64)',
+  summary: 'Symen v2.0.0 stable release.',
+  notes: [
+    'Modern and cleaner user interface',
+    'Added initial setup layer for faster onboarding',
+    'Built-in one-click service downloader (PHP, Nginx, Apache, Node.js, MySQL, PostgreSQL)',
+    'Up to 30x faster performance and much lighter memory usage than v1',
+  ],
+  downloadUrl: 'https://github.com/mlyrmdhnn/symen',
+}
 
-const installedVersion = ref('v2.0.0')
+function normalizeVersion(ver: string): string {
+  const trimmed = ver.trim()
+  return trimmed.startsWith('v') ? trimmed : `v${trimmed}`
+}
+
+const releases = computed<[Release, ...Release[]]>(() => {
+  const list = data.value
+  if (!Array.isArray(list) || list.length === 0) {
+    return [fallbackRelease]
+  }
+
+  const mapped = list.map<Release>((item) => {
+    const version = normalizeVersion(item.latest_version)
+    return {
+      version,
+      releasedAt: item.release_date,
+      channel: 'Stable',
+      compatibility: item.compatibility,
+      summary: `Symen ${version} release for ${item.compatibility}.`,
+      notes: item.about_version ?? [],
+      downloadUrl: item.download_url,
+    }
+  })
+
+  if (available.value && updateVersion.value) {
+    const newVersion = normalizeVersion(updateVersion.value)
+    const existing = mapped.find((release) => release.version === newVersion)
+    const currentRelease: Release = existing ?? {
+      ...fallbackRelease,
+      version: newVersion,
+      releasedAt: updateDate.value ?? 'Date unavailable',
+      summary: `Symen ${newVersion} stable release.`,
+      notes:
+        updateNotes.value
+          ?.split(/\r?\n/)
+          .map((note) => note.trim())
+          .filter(Boolean) ?? [],
+    }
+    return [currentRelease, ...mapped.filter((release) => release.version !== newVersion)]
+  }
+
+  return [mapped[0]!, ...mapped.slice(1)]
+})
+
+const updateResult = ref<'latest' | 'installed' | null>(null)
+const installedVersion = computed(() => normalizeVersion(currentVersion.value ?? '2.0.0'))
 const selectedVersionId = ref<string | null>(null)
-const updateResult = ref<UpdateResult>(null)
-const actionBusy = ref<'check' | 'install' | null>(null)
 
 const selectedRelease = computed(
-  () => releases.find((release) => release.version === selectedVersionId.value) ?? null,
+  () => releases.value.find((release) => release.version === selectedVersionId.value) ?? null,
 )
-const latestRelease = releases[0]
+const latestRelease = computed(() => releases.value[0])
+const selectedCanInstall = computed(
+  () =>
+    selectedRelease.value !== null &&
+    ((available.value &&
+      normalizeVersion(updateVersion.value ?? '') === selectedRelease.value.version) ||
+      (!checked.value &&
+        selectedRelease.value.version === latestRelease.value.version &&
+        selectedRelease.value.version !== installedVersion.value)),
+)
+const latestVersion = computed(() =>
+  normalizeVersion(updateVersion.value ?? latestRelease.value.version),
+)
+const latestNotes = computed(
+  () =>
+    updateNotes.value
+      ?.split(/\r?\n/)
+      .map((note) => note.trim())
+      .filter(Boolean) ?? latestRelease.value.notes,
+)
 const actionLabel = computed(() =>
   selectedRelease.value ? `Install ${selectedRelease.value.version}` : 'Check for Updates',
 )
 const actionText = computed(() => {
-  if (actionBusy.value === 'check') return 'Checking for Updates…'
-  if (actionBusy.value === 'install') return `Installing ${selectedVersionId.value}…`
+  if (pending.value || checking.value) return 'Checking for Updates…'
+  if (downloading.value) return `Downloading ${progress.value ?? 0}%…`
   return actionLabel.value
 })
-const panelKey = computed(() => selectedRelease.value?.version ?? `status-${updateResult.value}`)
+const actionDisabled = computed(
+  () =>
+    pending.value ||
+    checking.value ||
+    downloading.value ||
+    (selectedRelease.value !== null && !selectedCanInstall.value),
+)
+const panelKey = computed(
+  () =>
+    selectedRelease.value?.version ??
+    `status-${updateResult.value}-${available.value}-${Boolean(updateError.value)}`,
+)
 
 function selectRelease(version: string) {
   selectedVersionId.value = selectedVersionId.value === version ? null : version
 }
 
-function wait(milliseconds: number) {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds))
-}
-
 async function runPrimaryAction() {
-  if (actionBusy.value) return
+  if (pending.value || checking.value || downloading.value) return
 
   if (selectedRelease.value) {
-    const releaseToInstall = selectedRelease.value
-    actionBusy.value = 'install'
-    await wait(1200)
-    installedVersion.value = releaseToInstall.version
-    selectedVersionId.value = null
-    updateResult.value = 'installed'
-    actionBusy.value = null
+    if (!selectedCanInstall.value) return
+
+    if (!available.value) {
+      const foundUpdate = await checkForUpdates()
+      if (!foundUpdate || !selectedCanInstall.value) {
+        if (!foundUpdate && !updateError.value) updateResult.value = 'latest'
+        return
+      }
+    }
+
+    if (await installUpdate()) {
+      updateResult.value = 'installed'
+      selectedVersionId.value = null
+    }
     return
   }
 
-  actionBusy.value = 'check'
   updateResult.value = null
-  await wait(900)
-  updateResult.value = installedVersion.value === latestRelease.version ? 'latest' : 'available'
-  actionBusy.value = null
+  const foundUpdate = await checkForUpdates()
+  if (!updateError.value) updateResult.value = foundUpdate ? null : 'latest'
 }
 </script>
 
@@ -157,7 +212,7 @@ async function runPrimaryAction() {
             v-for="release in releases"
             :key="release.version"
             type="button"
-            :disabled="actionBusy !== null"
+            :disabled="checking || downloading"
             :aria-pressed="selectedVersionId === release.version"
             :class="[
               'flex w-full items-center justify-between gap-3 rounded-xl border p-4 text-left transition-colors duration-200 hover:bg-soft focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70',
@@ -245,22 +300,37 @@ async function runPrimaryAction() {
               </template>
 
               <template v-else>
-                <template v-if="updateResult === 'available'">
+                <template v-if="updateError">
+                  <span
+                    class="inline-flex rounded-lg bg-soft px-3 py-2 text-xs font-semibold text-accent"
+                  >
+                    UPDATE CHECK FAILED
+                  </span>
+                  <h3 class="mt-5 text-2xl font-semibold tracking-tight text-primary">
+                    Unable to check for updates
+                  </h3>
+                  <p class="mt-3 break-words text-sm leading-relaxed text-muted">
+                    {{ updateError }}
+                  </p>
+                </template>
+
+                <template v-else-if="available && updateResult !== 'installed'">
                   <span
                     class="inline-flex rounded-lg bg-soft px-3 py-2 text-xs font-semibold text-accent"
                   >
                     UPDATE AVAILABLE
                   </span>
                   <h3 class="mt-5 text-2xl font-semibold tracking-tight text-primary">
-                    A new version {{ latestRelease.version }} is available
+                    A new version {{ latestVersion }} is available
                   </h3>
                   <p class="mt-3 text-sm leading-relaxed text-muted">
-                    You’re currently on {{ installedVersion }}. {{ latestRelease.summary }}
+                    You’re currently on {{ installedVersion }}.
+                    {{ latestRelease.summary }}
                   </p>
                   <h4 class="mt-6 text-sm font-semibold text-primary">Release highlights</h4>
                   <ul class="mt-3 space-y-3">
                     <li
-                      v-for="note in latestRelease.notes"
+                      v-for="note in latestNotes"
                       :key="note"
                       class="flex gap-3 text-sm leading-relaxed text-muted"
                     >
@@ -269,11 +339,14 @@ async function runPrimaryAction() {
                     </li>
                   </ul>
                   <p class="mt-5 border-t border-subtle pt-4 text-xs text-muted">
-                    Released {{ latestRelease.releasedAt }} · {{ latestRelease.compatibility }}
+                    Released {{ updateDate ?? latestRelease.releasedAt }} ·
+                    {{ latestRelease.compatibility }}
                   </p>
                 </template>
 
-                <template v-else-if="updateResult === 'latest'">
+                <template
+                  v-else-if="updateResult === 'latest' || (checked && !available && !updateError)"
+                >
                   <span
                     class="inline-flex rounded-lg bg-soft px-3 py-2 text-xs font-semibold text-accent"
                   >
@@ -295,11 +368,11 @@ async function runPrimaryAction() {
                     INSTALL COMPLETE
                   </span>
                   <h3 class="mt-5 text-2xl font-semibold tracking-tight text-primary">
-                    Symen {{ installedVersion }} is ready
+                    Symen {{ latestVersion }} is ready
                   </h3>
                   <p class="mt-3 text-sm leading-relaxed text-muted">
-                    The selected version has been installed in this preview. Your release selection
-                    is cleared, so you can check for updates or choose another version.
+                    The signed update was installed. Symen is restarting to finish applying the
+                    update.
                   </p>
                 </template>
 
@@ -329,20 +402,22 @@ async function runPrimaryAction() {
             <p class="text-xs text-muted">
               {{
                 selectedRelease
-                  ? 'Install is simulated in this frontend preview.'
-                  : 'Update checks use mock release data.'
+                  ? selectedCanInstall
+                    ? 'Install uses the signed updater package for this release.'
+                    : 'Only the latest signed release can be installed; older releases are shown for reference.'
+                  : 'Update checks use the configured Cloudflare updater manifest.'
               }}
             </p>
             <button
               class="inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-fg hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
               type="button"
-              :disabled="actionBusy !== null"
+              :disabled="actionDisabled"
               @click="runPrimaryAction"
             >
               <Transition name="button-label" mode="out-in">
                 <span :key="actionText" class="inline-flex items-center gap-2">
                   <span
-                    v-if="actionBusy"
+                    v-if="checking || downloading"
                     class="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
                     aria-hidden="true"
                   ></span>
@@ -351,6 +426,38 @@ async function runPrimaryAction() {
               </Transition>
             </button>
           </div>
+          <div
+            v-if="downloading"
+            class="mt-4 rounded-xl border border-subtle bg-surface p-4"
+            role="status"
+            aria-live="polite"
+          >
+            <div class="flex items-center justify-between gap-3 text-xs">
+              <span class="font-semibold text-primary">Downloading update</span>
+              <span class="font-mono text-muted">
+                {{
+                  progress === null ? `${downloadedBytes.toLocaleString()} bytes` : `${progress}%`
+                }}
+              </span>
+            </div>
+            <div class="mt-3 h-2 overflow-hidden rounded-full bg-soft">
+              <div
+                class="h-full rounded-full bg-accent transition-[width] duration-150"
+                :class="progress === null ? 'w-1/3 animate-pulse' : ''"
+                :style="progress === null ? undefined : { width: `${progress}%` }"
+              ></div>
+            </div>
+            <p v-if="totalBytes" class="mt-2 text-right font-mono text-[10px] text-muted">
+              {{ downloadedBytes.toLocaleString() }} / {{ totalBytes.toLocaleString() }} bytes
+            </p>
+          </div>
+          <p
+            v-if="versionListError && !pending"
+            class="mt-3 break-words text-xs text-muted"
+            role="status"
+          >
+            Release notes could not be loaded: {{ versionListError }}
+          </p>
         </div>
       </div>
     </section>

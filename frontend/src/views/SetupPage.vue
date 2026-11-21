@@ -163,62 +163,57 @@ const optionDescriptions: Record<Exclude<SetupOption, null>, { title: string; te
         </div>
       </div>
 
-      <!-- Action Buttons + Animated Hover Description -->
-      <div class="mt-8 flex flex-col items-start">
+      <!-- Action Buttons + Floating Hover Description -->
+      <div class="relative mt-8 inline-flex flex-col items-start">
         <div class="flex flex-wrap items-center gap-3">
           <!-- Button 1: Blank Services -->
-          <routerLink
+          <RouterLink
             to="/"
-            type="button"
             @mouseenter="hoveredOption = 'blank'"
             @mouseleave="hoveredOption = null"
             @focus="hoveredOption = 'blank'"
             @blur="hoveredOption = null"
-            class="inline-flex min-h-11 w-max items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-accent-fg transition-all duration-150 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none cursor-pointer"
+            class="inline-flex min-h-11 w-max cursor-pointer items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-accent-fg transition-all duration-150 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
           >
             Continue with blank services
-          </routerLink>
+          </RouterLink>
 
           <!-- Button 2: Setup Services (Primary CTA) -->
-          <routerLink
+          <RouterLink
             to="/download"
-            type="button"
             @mouseenter="hoveredOption = 'setup'"
             @mouseleave="hoveredOption = null"
             @focus="hoveredOption = 'setup'"
             @blur="hoveredOption = null"
-            class="inline-flex min-h-11 w-max items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-accent-fg transition-all duration-150 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none cursor-pointer"
+            class="inline-flex min-h-11 w-max cursor-pointer items-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-accent-fg transition-all duration-150 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none"
           >
             Continue setup services
-          </routerLink>
+          </RouterLink>
         </div>
 
-        <!-- Fixed-height container biar layout gak loncat saat hover -->
-        <div class="mt-3 min-h-[4.25rem] w-full max-w-xl">
-          <Transition
-            mode="out-in"
-            enter-active-class="transition-all duration-200 ease-out"
-            enter-from-class="opacity-0 -translate-y-1.5"
-            enter-to-class="opacity-100 translate-y-0"
-            leave-active-class="transition-all duration-150 ease-in"
-            leave-from-class="opacity-100 translate-y-0"
-            leave-to-class="opacity-0 -translate-y-1"
+        <!-- Absolute Floating Popup (tidak mendorong layout bawah & aman dari spam hover) -->
+        <Transition
+          enter-active-class="transition-all duration-150 ease-out"
+          enter-from-class="opacity-0 -translate-y-1"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-active-class="transition-all duration-100 ease-in"
+          leave-from-class="opacity-100 translate-y-0"
+          leave-to-class="opacity-0 -translate-y-1"
+        >
+          <div
+            v-if="hoveredOption"
+            :key="hoveredOption"
+            class="pointer-events-none absolute top-full left-0 z-20 mt-3 flex w-[min(36rem,calc(100vw-3rem))] items-start gap-2.5 rounded-xl border border-subtle bg-elevated px-4 py-3 text-sm shadow-lg"
           >
-            <div
-              v-if="hoveredOption"
-              :key="hoveredOption"
-              class="flex items-start gap-2.5 rounded-xl border border-subtle bg-elevated/80 px-4 py-3 text-sm"
-            >
-              <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
-              <p class="leading-relaxed text-muted">
-                <span class="font-medium text-primary">
-                  {{ optionDescriptions[hoveredOption].title }}:
-                </span>
-                {{ optionDescriptions[hoveredOption].text }}
-              </p>
-            </div>
-          </Transition>
-        </div>
+            <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"></span>
+            <p class="leading-relaxed text-muted">
+              <span class="font-medium text-primary">
+                {{ optionDescriptions[hoveredOption].title }}:
+              </span>
+              {{ optionDescriptions[hoveredOption].text }}
+            </p>
+          </div>
+        </Transition>
       </div>
     </div>
   </div>

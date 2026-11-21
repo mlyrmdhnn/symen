@@ -13,6 +13,7 @@ interface ServiceItem {
   pid: number
   is_run: boolean
   optional_command: string
+  stop_command: string
 }
 
 //#region Read Services All
@@ -33,6 +34,7 @@ const updatedPayload = ref({
   pid: 0,
   is_run: false,
   optional_command: '',
+  stop_command: '',
 })
 
 function useService() {
@@ -91,6 +93,7 @@ function useService() {
     up.pid = d.pid
     up.is_run = d.is_run
     up.optional_command = d.optional_command
+    up.stop_command = d.stop_command
   }
 
   const updateData = async () => {

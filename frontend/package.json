@@ -18,6 +18,8 @@
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.4",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "highcharts": "^13.1.1",
     "highcharts-vue": "^2.0.2",
     "pinia": "^4.0.3",

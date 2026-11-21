@@ -90,13 +90,10 @@ onMounted(() => {
 onUnmounted(() => {
   if (intervalId) clearInterval(intervalId)
 })
-
-// const {} = useInvoke('set_name', { immediate: true, payload: { name: 'Mungskiee' } })
 </script>
 
 <template>
   <MainTemplate>
-    <ThingkingDot />
     <section class="mb-8 flex flex-wrap items-end justify-between gap-6">
       <div>
         <p class="mb-3 flex items-center gap-2 text-xs font-bold tracking-[0.16em] text-muted">
