@@ -1,21 +1,12 @@
 [
   {
-    "id": "72e0b834d4d2402b89f8fd3125591b55",
+    "id": "734a2329ad124022b3c590b15282d5e7",
     "executable": "nginx.exe",
     "is_run": false,
     "name": "Nginx",
     "optional_command": "",
+    "stop_command": "",
     "path": "D:\\nginx",
-    "pid": 0,
-    "port": 0
-  },
-  {
-    "id": "93e2fb46845c44a28ed69fee6fe63c21",
-    "executable": "php.exe",
-    "is_run": false,
-    "name": "PHP",
-    "optional_command": "",
-    "path": "D:\\php",
     "pid": 0,
     "port": 0
   }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -72,9 +72,81 @@ pub struct ServicesDB {
     pub is_run: bool,
     pub name: String,
     pub optional_command: String,
+    #[serde(default)]
+    pub stop_command: String,
     pub path: String,
     pub pid: u32,
     pub port: u32,
+}
+
+#[derive(Serialize)]
+pub struct ServiceLogBatch {
+    pub source_id: String,
+    pub service_id: String,
+    pub service: String,
+    pub executable: String,
+    pub content: String,
+    pub start_offset: u64,
+    pub offset: u64,
+}
+
+fn read_log_delta(path: &Path, requested_offset: u64) -> Result<(String, u64, u64), String> {
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((String::new(), 0, 0));
+        }
+        Err(error) => return Err(format!("Failed to open service log: {error}")),
+    };
+    let file_length = file
+        .metadata()
+        .map_err(|error| format!("Failed to inspect service log: {error}"))?
+        .len();
+    let start_offset = if requested_offset > file_length {
+        0
+    } else {
+        requested_offset
+    };
+    file.seek(SeekFrom::Start(start_offset))
+        .map_err(|error| format!("Failed to seek service log: {error}"))?;
+
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|error| format!("Failed to read service log: {error}"))?;
+    let end = bytes
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map_or(0, |index| index + 1);
+    let offset = start_offset + end as u64;
+    let content = String::from_utf8_lossy(&bytes[..end]).into_owned();
+    Ok((content, start_offset, offset))
+}
+
+fn service_log_sources(service: &ServicesDB) -> (String, PathBuf) {
+    (service.id.clone(), get_log_file_path(&service.id))
+}
+
+#[tauri::command]
+pub fn get_service_logs(
+    offsets: std::collections::HashMap<String, u64>,
+) -> Result<Vec<ServiceLogBatch>, String> {
+    service_all()?
+        .into_iter()
+        .map(|service| {
+            let (source_id, path) = service_log_sources(&service);
+            let requested_offset = offsets.get(&source_id).copied().unwrap_or_default();
+            let (content, start_offset, offset) = read_log_delta(&path, requested_offset)?;
+            Ok(ServiceLogBatch {
+                source_id,
+                service_id: service.id,
+                service: service.name,
+                executable: service.executable,
+                content,
+                start_offset,
+                offset,
+            })
+        })
+        .collect()
 }
 
 // Get All Service
@@ -104,6 +176,16 @@ pub fn add_service(
     command: String,
     executable: String,
 ) -> Result<(), String> {
+    add_service_with_stop_command(path, name, command, executable, String::new())
+}
+
+pub(crate) fn add_service_with_stop_command(
+    path: String,
+    name: String,
+    command: String,
+    executable: String,
+    stop_command: String,
+) -> Result<(), String> {
     let file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("src")
         .join("services")
@@ -115,38 +197,41 @@ pub fn add_service(
         Err(error) => return Err(format!("Failed to read services: {error}")),
     };
 
-    let mut json_data: serde_json::Value = serde_json::from_str(&content)
+    let mut services: Vec<ServicesDB> = serde_json::from_str(&content)
         .map_err(|error| format!("Failed to parse services: {error}"))?;
+    let normalized_path = |value: &str| {
+        value
+            .replace('/', "\\")
+            .trim_end_matches('\\')
+            .to_lowercase()
+    };
 
-    let id = Uuid::new_v4().simple().to_string();
-
-    let services = json_data
-        .as_array_mut()
-        .ok_or_else(|| "Services data must be a JSON array".to_string())?;
-
-    let validated_data: Vec<ServicesDB> =
-        serde_json::from_str(&content).map_err(|e| format!("Failed parsing data : {}", e))?;
-
-    if !content.is_empty()
-        && let Some(existing) = validated_data
-            .iter()
-            .find(|s| s.path == path || s.executable == executable)
+    if let Some(existing) = services
+        .iter_mut()
+        .find(|service| normalized_path(&service.path) == normalized_path(&path))
     {
-        return Err(format!("Service '{}' already exists", existing.name));
+        existing.name = name;
+        existing.optional_command = command;
+        existing.executable = executable;
+        existing.path = path;
+        if !stop_command.trim().is_empty() {
+            existing.stop_command = stop_command;
+        }
+    } else {
+        services.push(ServicesDB {
+            id: Uuid::new_v4().simple().to_string(),
+            executable,
+            is_run: false,
+            name,
+            optional_command: command,
+            stop_command,
+            path,
+            pid: 0,
+            port: 0,
+        });
     }
 
-    services.push(json!({
-        "id": id,
-        "name" : name,
-        "executable" : executable,
-        "path" : path,
-        "port" : 0,
-        "pid" : 0,
-        "optional_command" : command,
-        "is_run" : false
-    }));
-
-    let content = serde_json::to_string_pretty(&json_data)
+    let content = serde_json::to_string_pretty(&services)
         .map_err(|error| format!("Failed to serialize services: {error}"))?;
     fs::write(file_path, content).map_err(|error| format!("Failed to save services: {error}"))?;
     Ok(())
@@ -252,7 +337,7 @@ pub fn start_service(id: String) -> Result<u32, String> {
         .stderr(Stdio::from(stderr_file));
 
     if !target.optional_command.trim().is_empty() {
-        let args: Vec<&str> = target.optional_command.split_whitespace().collect();
+        let args = parse_command_args(&target.optional_command)?;
         cmd.args(args);
     }
 
@@ -261,25 +346,51 @@ pub fn start_service(id: String) -> Result<u32, String> {
         cmd.creation_flags(0x08000000);
     }
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to start '{}': {}", target.name, e))?;
+    let pid = if target.stop_command.trim().is_empty() {
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("Failed to start '{}': {}", target.name, e))?;
+        let pid = child.id();
 
-    let pid = child.id();
+        thread::sleep(Duration::from_millis(500));
 
-    thread::sleep(Duration::from_millis(500));
-
-    if let Some(status) = child
-        .try_wait()
-        .map_err(|e| format!("Failed to check '{}' startup: {}", target.name, e))?
-    {
-        return Err(startup_failure_message(
-            &target.name,
-            &status.to_string(),
-            &log_path,
-            log_start,
-        )?);
-    }
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|e| format!("Failed to check '{}' startup: {}", target.name, e))?
+        {
+            return Err(startup_failure_message(
+                &target.name,
+                &status.to_string(),
+                &log_path,
+                log_start,
+            )?);
+        }
+        pid
+    } else {
+        let status = cmd
+            .status()
+            .map_err(|e| format!("Failed to start '{}': {}", target.name, e))?;
+        if !status.success() {
+            return Err(startup_failure_message(
+                &target.name,
+                &status.to_string(),
+                &log_path,
+                log_start,
+            )?);
+        }
+        let pid_file = PathBuf::from(&target.path)
+            .join("data")
+            .join("postmaster.pid");
+        let pid_text = fs::read_to_string(&pid_file)
+            .map_err(|e| format!("PostgreSQL started but its PID file could not be read: {e}"))?;
+        pid_text
+            .lines()
+            .next()
+            .ok_or_else(|| "PostgreSQL PID file is empty".to_string())?
+            .trim()
+            .parse::<u32>()
+            .map_err(|e| format!("Invalid PostgreSQL PID: {e}"))?
+    };
 
     let port = detect_port_for_pid_tree(pid).unwrap_or(0);
 
@@ -371,9 +482,37 @@ pub fn stop_service(pid: u32) -> Result<(), String> {
         .find(|s| s.pid as u32 == pid)
         .ok_or_else(|| format!("Service with PID {} not found", pid))?;
 
-    if pid > 0 {
+    if pid > 0 && !target.stop_command.trim().is_empty() {
+        let exe_path = PathBuf::from(&target.path).join(&target.executable);
+        let args = parse_command_args(&target.stop_command)?;
+        let mut cmd = Command::new(exe_path);
+        cmd.current_dir(&target.path).args(args);
+
+        #[cfg(target_os = "windows")]
+        {
+            cmd.creation_flags(0x08000000);
+        }
+
+        let output = cmd
+            .output()
+            .map_err(|e| format!("Failed to stop '{}': {e}", target.name))?;
+        if !output.status.success() {
+            let details = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "Failed to stop '{}': {}{}",
+                target.name,
+                output.status,
+                if details.trim().is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", details.trim())
+                }
+            ));
+        }
+    } else if pid > 0 {
         let mut cmd = Command::new("taskkill");
-        cmd.args(["/F", "/IM", &target.executable.to_string()]);
+        let pid = pid.to_string();
+        cmd.args(["/F", "/PID", &pid]);
 
         #[cfg(target_os = "windows")]
         {
@@ -400,6 +539,40 @@ pub fn stop_service(pid: u32) -> Result<(), String> {
     fs::write(&db_path, new_json).map_err(|e| format!("Failed to save services: {}", e))?;
 
     Ok(())
+}
+
+fn parse_command_args(command: &str) -> Result<Vec<String>, String> {
+    let mut args = Vec::new();
+    let mut argument = String::new();
+    let mut in_quotes = false;
+    let mut argument_started = false;
+
+    for character in command.chars() {
+        match character {
+            '"' => {
+                in_quotes = !in_quotes;
+                argument_started = true;
+            }
+            character if character.is_whitespace() && !in_quotes => {
+                if argument_started {
+                    args.push(std::mem::take(&mut argument));
+                    argument_started = false;
+                }
+            }
+            character => {
+                argument.push(character);
+                argument_started = true;
+            }
+        }
+    }
+
+    if in_quotes {
+        return Err("Service command contains an unclosed quote".to_string());
+    }
+    if argument_started {
+        args.push(argument);
+    }
+    Ok(args)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -467,8 +640,11 @@ pub fn get_name() -> Result<Option<Conf>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{open_log_file, remove_log_file, startup_failure_message};
-    use std::fs;
+    use super::{
+        ServicesDB, get_log_file_path, open_log_file, parse_command_args, read_log_delta,
+        remove_log_file, service_log_sources, startup_failure_message,
+    };
+    use std::fs::{self, OpenOptions};
     use std::io::Write;
     use uuid::Uuid;
 
@@ -533,5 +709,73 @@ mod tests {
         remove_log_file(&log_path).expect("missing log file should be ignored");
 
         fs::remove_dir_all(log_dir).expect("temporary log directory should be removed");
+    }
+
+    #[test]
+    fn parses_quoted_service_arguments_with_spaces() {
+        let args = parse_command_args(
+            "-D \"C:\\symen\\PostgreSQL 18\\data\" -l \"C:\\symen\\PostgreSQL 18\\postgresql.log\" start",
+        )
+        .expect("quoted command should parse");
+
+        assert_eq!(
+            args,
+            [
+                "-D",
+                "C:\\symen\\PostgreSQL 18\\data",
+                "-l",
+                "C:\\symen\\PostgreSQL 18\\postgresql.log",
+                "start",
+            ]
+        );
+        assert!(parse_command_args("\"unclosed").is_err());
+    }
+
+    #[test]
+    fn log_delta_returns_complete_lines_and_keeps_partial_line_for_next_poll() {
+        let log_dir = std::env::temp_dir().join(format!("symen-logs-{}", Uuid::new_v4()));
+        let log_path = log_dir.join("service.log");
+        fs::create_dir_all(&log_dir).expect("temporary directory should be created");
+        assert_eq!(
+            read_log_delta(&log_dir.join("not-created.log"), 0)
+                .expect("missing log should not fail"),
+            (String::new(), 0, 0)
+        );
+        fs::write(&log_path, "first line\npartial").expect("log file should be written");
+
+        let (first_content, _, offset) =
+            read_log_delta(&log_path, 0).expect("first log delta should be read");
+        assert_eq!(first_content, "first line\n");
+
+        OpenOptions::new()
+            .append(true)
+            .open(&log_path)
+            .expect("log file should open for append")
+            .write_all(b" line\n")
+            .expect("completion of partial line should be appended");
+        let (next_content, _, _) =
+            read_log_delta(&log_path, offset).expect("next log delta should be read");
+        assert_eq!(next_content, "partial line\n");
+
+        fs::remove_dir_all(log_dir).expect("temporary directory should be removed");
+    }
+
+    #[test]
+    fn service_logs_use_only_the_centralized_log_path() {
+        let service = ServicesDB {
+            id: "service-id".to_string(),
+            executable: "bin/nginx.exe".to_string(),
+            is_run: false,
+            name: "Nginx".to_string(),
+            optional_command: String::new(),
+            stop_command: String::new(),
+            path: "C:\\services\\nginx".to_string(),
+            pid: 0,
+            port: 0,
+        };
+
+        let (source_id, path) = service_log_sources(&service);
+        assert_eq!(source_id, service.id);
+        assert_eq!(path, get_log_file_path("service-id"));
     }
 }
