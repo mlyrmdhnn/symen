@@ -28,7 +28,7 @@ const items = ref([
   { title: 'Logs', to: '/logs', icon: Terminal, isHover: false },
   { title: 'Version', to: '/version', icon: ArrowUpFromLine, isHover: false },
   { title: 'Settings', to: '/settings', icon: Settings, isHover: false },
-  { title: 'testing', to: '/setup', icon: Bug, isHover: false },
+  // { title: 'testing', to: '/setup', icon: Bug, isHover: false },
 ])
 </script>
 

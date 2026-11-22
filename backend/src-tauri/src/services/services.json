@@ -1,13 +1,1 @@
-[
-  {
-    "id": "734a2329ad124022b3c590b15282d5e7",
-    "executable": "nginx.exe",
-    "is_run": false,
-    "name": "Nginx",
-    "optional_command": "",
-    "stop_command": "",
-    "path": "D:\\nginx",
-    "pid": 0,
-    "port": 0
-  }
-]
+[]

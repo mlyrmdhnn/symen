@@ -27,6 +27,7 @@ const ALLOWED_DOWNLOAD_HOSTS: &[&str] = &[
     "objects.githubusercontent.com",
     "release-assets.githubusercontent.com",
     "cdn.mysql.com",
+    "symen.mulyaranadhan.workers.dev",
 ];
 
 // Fallback bawaan jika user pertama kali buka aplikasi dalam kondisi offline

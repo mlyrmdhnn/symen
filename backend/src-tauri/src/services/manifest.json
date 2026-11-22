@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-20",
+  "updated_at": "2026-11-22",
   "services": {
     "php": [
       {
@@ -186,7 +186,7 @@
         "name": "Apache 2.4.71 (VS18)",
         "channel": "2.4",
         "version": "2.4.71",
-        "url": "https://pub-2d96730c227e4b95b37c19eac13b91e0.r2.dev/apache/httpd-2.4.71-261112-Win64-VS18.zip",
+        "url": "https://symen.mulyaranadhan.workers.dev/apache/httpd-2.4.71-261112-Win64-VS18.zip",
         "sha256": "44961a929dff16b767b3adbcea55760a942a00239b2891dc55806be34029e1fc",
         "strip_prefix": "Apache24",
         "bin_subpath": "bin",
@@ -202,7 +202,7 @@
         "name": "MySQL 9.7 (LTS)",
         "channel": "9.7 LTS",
         "version": "9.7.4",
-        "url": "https://pub-2d96730c227e4b95b37c19eac13b91e0.r2.dev/mysql/mysql-9.7.4-winx64.zip",
+        "url": "https://symen.mulyaranadhan.workers.dev/mysql/mysql-9.7.4-winx64.zip",
         "sha256": "641bdaf01004927194c561b956f14f915a3166c9b0f9b1b5464ae63152bf4b96",
         "strip_prefix": "mysql-9.7.4-winx64",
         "bin_subpath": "bin",
@@ -216,7 +216,7 @@
         "name": "MySQL 8.4 LTS",
         "channel": "8.4 LTS",
         "version": "8.4.13",
-        "url": "https://pub-2d96730c227e4b95b37c19eac13b91e0.r2.dev/mysql/mysql-8.4.13-winx64.zip",
+        "url": "https://symen.mulyaranadhan.workers.dev/mysql/mysql-8.4.13-winx64.zip",
         "sha256": "e9cd98b1d23f122987b1afca26ad942efec5891481103d48ae3cde237fa3ea54",
         "strip_prefix": "mysql-8.4.13-winx64",
         "bin_subpath": "bin",
@@ -230,7 +230,7 @@
         "name": "MySQL 8.0",
         "channel": "8.0",
         "version": "8.0.46",
-        "url": "https://pub-2d96730c227e4b95b37c19eac13b91e0.r2.dev/mysql/mysql-8.0.46-winx64.zip",
+        "url": "https://symen.mulyaranadhan.workers.dev/mysql/mysql-8.0.46-winx64.zip",
         "sha256": "28e9eda019d88eff4478d811ea2110b83f02a3966be157fe91cc55def3ab0d4d",
         "strip_prefix": "mysql-8.0.46-winx64",
         "bin_subpath": "bin",

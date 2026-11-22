@@ -4,12 +4,11 @@ import MainTemplate from '@/template/MainTemplate.vue'
 import useInvoke from '@/lib/http'
 import { useAppUpdater } from '@/composables/useAppUpdater'
 
-type RawRelease = {
-  latest_version: string
-  download_url: string
-  release_date: string
-  compatibility: string
-  about_version: string[]
+type UpdaterManifest = {
+  version: string
+  notes?: string | null
+  pub_date?: string | null
+  platforms: Record<string, { signature: string; url: string }>
 }
 
 type Release = {
@@ -22,7 +21,7 @@ type Release = {
   downloadUrl: string
 }
 
-const { data, pending, error: versionListError } = useInvoke<RawRelease[]>('get_versions')
+const { data, pending, error: versionListError } = useInvoke<UpdaterManifest | null>('get_versions')
 const {
   checking,
   available,
@@ -61,23 +60,27 @@ function normalizeVersion(ver: string): string {
 }
 
 const releases = computed<[Release, ...Release[]]>(() => {
-  const list = data.value
-  if (!Array.isArray(list) || list.length === 0) {
+  const manifest = data.value
+  if (!manifest) {
     return [fallbackRelease]
   }
 
-  const mapped = list.map<Release>((item) => {
-    const version = normalizeVersion(item.latest_version)
-    return {
+  const version = normalizeVersion(manifest.version)
+  const mapped: Release[] = [
+    {
       version,
-      releasedAt: item.release_date,
+      releasedAt: manifest.pub_date ?? 'Date unavailable',
       channel: 'Stable',
-      compatibility: item.compatibility,
-      summary: `Symen ${version} release for ${item.compatibility}.`,
-      notes: item.about_version ?? [],
-      downloadUrl: item.download_url,
-    }
-  })
+      compatibility: 'Windows x86_64',
+      summary: `Symen ${version} release for Windows x86_64.`,
+      notes:
+        manifest.notes
+          ?.split(/\r?\n/)
+          .map((note) => note.trim().replace(/^[-*]\s*/, ''))
+          .filter(Boolean) ?? [],
+      downloadUrl: manifest.platforms['windows-x86_64']?.url ?? '',
+    },
+  ]
 
   if (available.value && updateVersion.value) {
     const newVersion = normalizeVersion(updateVersion.value)
@@ -90,7 +93,7 @@ const releases = computed<[Release, ...Release[]]>(() => {
       notes:
         updateNotes.value
           ?.split(/\r?\n/)
-          .map((note) => note.trim())
+          .map((note) => note.trim().replace(/^[-*]\s*/, ''))
           .filter(Boolean) ?? [],
     }
     return [currentRelease, ...mapped.filter((release) => release.version !== newVersion)]
@@ -123,7 +126,7 @@ const latestNotes = computed(
   () =>
     updateNotes.value
       ?.split(/\r?\n/)
-      .map((note) => note.trim())
+      .map((note) => note.trim().replace(/^[-*]\s*/, ''))
       .filter(Boolean) ?? latestRelease.value.notes,
 )
 const actionLabel = computed(() =>
@@ -205,47 +208,7 @@ async function runPrimaryAction() {
         </span>
       </div>
 
-      <div class="grid gap-6 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.8fr)]">
-        <nav class="space-y-2" aria-label="Available versions">
-          <p class="mb-3 text-xs font-bold tracking-[0.12em] text-muted">AVAILABLE VERSIONS</p>
-          <button
-            v-for="release in releases"
-            :key="release.version"
-            type="button"
-            :disabled="checking || downloading"
-            :aria-pressed="selectedVersionId === release.version"
-            :class="[
-              'flex w-full items-center justify-between gap-3 rounded-xl border p-4 text-left transition-colors duration-200 hover:bg-soft focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70',
-              selectedVersionId === release.version
-                ? 'border-accent bg-soft'
-                : 'border-subtle bg-surface',
-            ]"
-            @click="selectRelease(release.version)"
-          >
-            <span>
-              <strong class="block text-sm font-semibold text-primary">{{
-                release.version
-              }}</strong>
-              <small class="mt-1 block text-xs text-muted">{{ release.releasedAt }}</small>
-            </span>
-            <span
-              v-if="release.version === installedVersion"
-              class="shrink-0 rounded-md bg-elevated px-2 py-1 text-[10px] font-bold text-muted"
-            >
-              CURRENT
-            </span>
-            <span
-              v-else-if="release.version === latestRelease.version"
-              class="shrink-0 rounded-md bg-accent px-2 py-1 text-[10px] font-bold text-accent-fg"
-            >
-              LATEST
-            </span>
-          </button>
-          <p class="pt-2 text-xs leading-relaxed text-muted">
-            Choosing an older release is available for compatibility testing.
-          </p>
-        </nav>
-
+      <div class="">
         <div class="min-w-0">
           <Transition name="version-panel" mode="out-in">
             <div

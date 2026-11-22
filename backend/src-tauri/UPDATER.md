@@ -2,24 +2,16 @@
 
 Symen checks the static Tauri updater manifest at:
 
-`https://pub-2d96730c227e4b95b37c19eac13b91e0.r2.dev/version.json`
+`https://symen.mulyaranadhan.workers.dev/version.json`
+
+This endpoint is separate from the release-history endpoint fetched by
+`get_versions` (`https://symen.mulyaranadhan.workers.dev/version.json`). The
+release-history endpoint returns an array of Symen release details; the Tauri
+updater endpoint must return the signed manifest below. Serving the release
+array from the updater endpoint causes update checks to fail during parsing.
 
 Publish the following shape for each release. The signature is the **text
 contents** of the generated installer `.sig` file, not a URL to that file.
-
-```json
-{
-  "version": "2.0.1",
-  "notes": "Release highlights, one item per line.",
-  "pub_date": "2026-11-21T12:00:00Z",
-  "platforms": {
-    "windows-x86_64": {
-      "signature": "<contents of symen_2.0.1_x64-setup.exe.sig>",
-      "url": "https://pub-2d96730c227e4b95b37c19eac13b91e0.r2.dev/symen_2.0.1_x64-setup.exe"
-    }
-  }
-}
-```
 
 For the NSIS target, Tauri v2 produces the `*-setup.exe` and its `*.sig` file.
 If publishing an updater archive instead, set `url` to the exact `.nsis.zip`

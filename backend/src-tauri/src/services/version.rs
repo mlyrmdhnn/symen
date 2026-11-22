@@ -1,17 +1,24 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReleaseInfo {
-    pub latest_version: String,
-    pub download_url: String,
-    pub release_date: String,
-    pub compatibility: String,
-    pub about_version: Vec<String>,
+pub struct UpdaterManifest {
+    pub version: String,
+    pub notes: Option<String>,
+    pub pub_date: Option<String>,
+    pub platforms: HashMap<String, PlatformUpdate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlatformUpdate {
+    pub signature: String,
+    pub url: String,
 }
 
 #[tauri::command]
-pub async fn get_versions() -> Result<Vec<ReleaseInfo>, String> {
-    let url = "https://pub-2d96730c227e4b95b37c19eac13b91e0.r2.dev/version.json";
+pub async fn get_versions() -> Result<UpdaterManifest, String> {
+    let url = "https://symen.mulyaranadhan.workers.dev/version.json";
 
     let response = reqwest::get(url)
         .await
@@ -20,44 +27,41 @@ pub async fn get_versions() -> Result<Vec<ReleaseInfo>, String> {
         .await
         .map_err(|e| format!("Failed to read version response: {e}"))?;
 
-    let json: serde_json::Value = serde_json::from_str(&response)
-        .map_err(|e| format!("Failed to parse version JSON: {e}"))?;
+    serde_json::from_str(&response)
+        .map_err(|e| format!("Failed to parse Tauri updater manifest: {e}"))
+}
 
-    if json.is_array() {
-        return serde_json::from_value(json)
-            .map_err(|e| format!("Failed to parse legacy version list: {e}"));
+#[cfg(test)]
+mod tests {
+    use super::UpdaterManifest;
+
+    #[test]
+    fn deserializes_tauri_v2_updater_manifest() {
+        let json = r#"{
+            "version": "2.0.0",
+            "notes": "- Modern and cleaner user interface\n- Added initial setup layer",
+            "pub_date": "2026-11-22T13:46:00+07:00",
+            "platforms": {
+                "windows-x86_64": {
+                    "signature": "signature",
+                    "url": "https://example.com/symen-setup.exe"
+                }
+            }
+        }"#;
+
+        let manifest: UpdaterManifest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(manifest.version, "2.0.0");
+        assert_eq!(
+            manifest.notes.as_deref(),
+            Some("- Modern and cleaner user interface\n- Added initial setup layer")
+        );
+        assert_eq!(
+            manifest.pub_date.as_deref(),
+            Some("2026-11-22T13:46:00+07:00")
+        );
+        let windows = manifest.platforms.get("windows-x86_64").unwrap();
+        assert_eq!(windows.signature, "signature");
+        assert_eq!(windows.url, "https://example.com/symen-setup.exe");
     }
-
-    let version = json
-        .get("version")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| "Updater manifest is missing its version.".to_string())?;
-    let platform = json
-        .pointer("/platforms/windows-x86_64")
-        .ok_or_else(|| "Updater manifest is missing platforms.windows-x86_64.".to_string())?;
-    let download_url = platform
-        .get("url")
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| "Updater manifest is missing the Windows download URL.".to_string())?;
-    let release_date = json
-        .get("pub_date")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("Date unavailable");
-    let notes = json
-        .get("notes")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default()
-        .lines()
-        .map(str::trim)
-        .filter(|note| !note.is_empty())
-        .map(str::to_string)
-        .collect();
-
-    Ok(vec![ReleaseInfo {
-        latest_version: version.to_string(),
-        download_url: download_url.to_string(),
-        release_date: release_date.to_string(),
-        compatibility: "Windows x86_64".to_string(),
-        about_version: notes,
-    }])
 }
