@@ -1,4 +1,4 @@
-<p align="center">
+<p align="">
   <img src="./backend/src-tauri/icons/128x128@2x.png" alt="Symen Logo" width="96" height="96" />
 </p>
 
