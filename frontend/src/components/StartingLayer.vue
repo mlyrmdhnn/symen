@@ -67,7 +67,7 @@ const setName = async () => {
   await execute()
 
   if (error.value) {
-    showToast('danger', 'Something went wrong', 'Failed to submit your name')
+    showToast('danger', 'Something went wrong', 'y', error.value)
     isLoading.value = false
     return
   }
