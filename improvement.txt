@@ -1,0 +1,4 @@
+Filter dari depan ke belakang di LOG
+UI yang masih kurang detail kecilnya seperti cursor-pointer sebagai salah satu contohnya
+Filter error log, ketika sangat panjang, maka akan ada tulisan di toast nya (info lebih lengkap di log) guna DX
+Device Information yang terpotong
