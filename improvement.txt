@@ -3,3 +3,4 @@ UI yang masih kurang detail kecilnya seperti cursor-pointer sebagai salah satu c
 Filter error log, ketika sangat panjang, maka akan ada tulisan di toast nya (info lebih lengkap di log) guna DX
 Device Information yang terpotong
 Logo aplikasi yang terlalu putih, ketika ada user yang light mode, maka akan tidak terlihat, lebih baik menggunakan outline atau warna yang fleksibel ketika user ingin berada di mode manapun
+memperbaiki path di mod.rs, lib.rs, dan service.rs menggunakan app.path(), menghindari menggunakan env::CARGO_DIR()
