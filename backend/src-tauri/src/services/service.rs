@@ -5,14 +5,52 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
+use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-fn get_log_file_path(id: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("services")
+fn get_app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data directory: {}", e))?;
+
+    if !dir.exists() {
+        fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    }
+
+    Ok(dir)
+}
+
+fn get_services_db_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let db_path = get_app_data_dir(app)?.join("services.json");
+    if !db_path.exists() {
+        fs::write(&db_path, "[]")
+            .map_err(|e| format!("Failed to initialize services.json: {}", e))?;
+    }
+    Ok(db_path)
+}
+
+fn get_config_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let file_path = get_app_data_dir(app)?.join("config.json");
+    if !file_path.exists() {
+        let default_conf = vec![Conf {
+            id: 1,
+            is_early: true,
+            name: String::new(),
+        }];
+        let json = serde_json::to_string_pretty(&default_conf)
+            .map_err(|e| format!("Gagal serialize JSON: {}", e))?;
+        fs::write(&file_path, json)
+            .map_err(|e| format!("Gagal menyimpan ke file: {}", e))?;
+    }
+    Ok(file_path)
+}
+
+fn get_log_file_path(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
+    Ok(get_app_data_dir(app)?
         .join("logs")
-        .join(format!("{}.log", id))
+        .join(format!("{}.log", id)))
 }
 
 fn open_log_file(log_path: &Path) -> Result<File, String> {
@@ -122,18 +160,19 @@ fn read_log_delta(path: &Path, requested_offset: u64) -> Result<(String, u64, u6
     Ok((content, start_offset, offset))
 }
 
-fn service_log_sources(service: &ServicesDB) -> (String, PathBuf) {
-    (service.id.clone(), get_log_file_path(&service.id))
+fn service_log_sources(app: &AppHandle, service: &ServicesDB) -> Result<(String, PathBuf), String> {
+    Ok((service.id.clone(), get_log_file_path(app, &service.id)?))
 }
 
 #[tauri::command]
 pub fn get_service_logs(
+    app: AppHandle,
     offsets: std::collections::HashMap<String, u64>,
 ) -> Result<Vec<ServiceLogBatch>, String> {
-    service_all()?
+    service_all(app.clone())?
         .into_iter()
         .map(|service| {
-            let (source_id, path) = service_log_sources(&service);
+            let (source_id, path) = service_log_sources(&app, &service)?;
             let requested_offset = offsets.get(&source_id).copied().unwrap_or_default();
             let (content, start_offset, offset) = read_log_delta(&path, requested_offset)?;
             Ok(ServiceLogBatch {
@@ -151,11 +190,8 @@ pub fn get_service_logs(
 
 // Get All Service
 #[tauri::command]
-pub fn service_all() -> Result<Vec<ServicesDB>, String> {
-    let db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("services")
-        .join("services.json");
+pub fn service_all(app: AppHandle) -> Result<Vec<ServicesDB>, String> {
+    let db_path = get_services_db_path(&app)?;
 
     if !Path::new(&db_path).exists() {
         return Ok(Vec::new());
@@ -171,25 +207,24 @@ pub fn service_all() -> Result<Vec<ServicesDB>, String> {
 
 #[tauri::command]
 pub fn add_service(
+    app: AppHandle,
     path: String,
     name: String,
     command: String,
     executable: String,
 ) -> Result<(), String> {
-    add_service_with_stop_command(path, name, command, executable, String::new())
+    add_service_with_stop_command(&app, path, name, command, executable, String::new())
 }
 
 pub(crate) fn add_service_with_stop_command(
+    app: &AppHandle,
     path: String,
     name: String,
     command: String,
     executable: String,
     stop_command: String,
 ) -> Result<(), String> {
-    let file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("services")
-        .join("services.json");
+    let file_path = get_services_db_path(app)?;
 
     let content = match fs::read_to_string(&file_path) {
         Ok(content) => content,
@@ -238,11 +273,8 @@ pub(crate) fn add_service_with_stop_command(
 }
 
 #[tauri::command]
-pub fn edit_service(updated_service: ServicesDB) -> Result<(), String> {
-    let db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("services")
-        .join("services.json");
+pub fn edit_service(app: AppHandle, updated_service: ServicesDB) -> Result<(), String> {
+    let db_path = get_services_db_path(&app)?;
 
     let data = fs::read_to_string(&db_path).map_err(|e| format!("Failed read services: {}", e))?;
 
@@ -267,11 +299,8 @@ pub fn edit_service(updated_service: ServicesDB) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn delete_service(id: String) -> Result<(), String> {
-    let db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("services")
-        .join("services.json");
+pub fn delete_service(app: AppHandle, id: String) -> Result<(), String> {
+    let db_path = get_services_db_path(&app)?;
 
     let data = fs::read_to_string(&db_path)
         .map_err(|e| format!("Failed to load services data : {}", e))?;
@@ -288,7 +317,7 @@ pub fn delete_service(id: String) -> Result<(), String> {
 
     let new_json = serde_json::to_string_pretty(&services).map_err(|e| e.to_string())?;
     fs::write(&db_path, &new_json).map_err(|e| e.to_string())?;
-    remove_log_file(&get_log_file_path(&id))?;
+    remove_log_file(&get_log_file_path(&app, &id)?)?;
 
     Ok(())
 }
@@ -296,11 +325,8 @@ pub fn delete_service(id: String) -> Result<(), String> {
 // fn write_log() {}
 
 #[tauri::command]
-pub fn start_service(id: String) -> Result<u32, String> {
-    let db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("services")
-        .join("services.json");
+pub fn start_service(app: AppHandle, id: String) -> Result<u32, String> {
+    let db_path = get_services_db_path(&app)?;
 
     let data =
         fs::read_to_string(&db_path).map_err(|e| format!("Failed to read services: {}", e))?;
@@ -317,7 +343,7 @@ pub fn start_service(id: String) -> Result<u32, String> {
         return Err(format!("Service '{}' is already running", target.name));
     }
 
-    let log_path = get_log_file_path(&target.id);
+    let log_path = get_log_file_path(&app, &target.id)?;
     let stdout_file = open_log_file(&log_path)?;
 
     let stderr_file = stdout_file
@@ -465,11 +491,8 @@ fn detect_port_for_pid_tree(root_pid: u32) -> Option<u16> {
 }
 
 #[tauri::command]
-pub fn stop_service(pid: u32) -> Result<(), String> {
-    let db_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("services")
-        .join("services.json");
+pub fn stop_service(app: AppHandle, pid: u32) -> Result<(), String> {
+    let db_path = get_services_db_path(&app)?;
 
     let data =
         fs::read_to_string(&db_path).map_err(|e| format!("Failed to read services: {}", e))?;
@@ -583,16 +606,13 @@ pub struct Conf {
 }
 
 #[tauri::command]
-pub fn edit_name(name: String) -> Result<(), String> {
+pub fn edit_name(app: AppHandle, name: String) -> Result<(), String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("Name cannot be empty".to_string());
     }
 
-    let file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("services")
-        .join("config.json");
+    let file_path = get_config_file_path(&app)?;
 
     let data = fs::read_to_string(&file_path).map_err(|e| format!("Failed read conf: {}", e))?;
 
@@ -620,11 +640,8 @@ pub fn edit_name(name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_name() -> Result<Option<Conf>, String> {
-    let file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("services")
-        .join("config.json");
+pub fn get_name(app: AppHandle) -> Result<Option<Conf>, String> {
+    let file_path = get_config_file_path(&app)?;
 
     if !Path::new(&file_path).exists() {
         return Ok(None);
@@ -641,8 +658,8 @@ pub fn get_name() -> Result<Option<Conf>, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ServicesDB, get_log_file_path, open_log_file, parse_command_args, read_log_delta,
-        remove_log_file, service_log_sources, startup_failure_message,
+        open_log_file, parse_command_args, read_log_delta, remove_log_file,
+        startup_failure_message,
     };
     use std::fs::{self, OpenOptions};
     use std::io::Write;
@@ -758,24 +775,5 @@ mod tests {
         assert_eq!(next_content, "partial line\n");
 
         fs::remove_dir_all(log_dir).expect("temporary directory should be removed");
-    }
-
-    #[test]
-    fn service_logs_use_only_the_centralized_log_path() {
-        let service = ServicesDB {
-            id: "service-id".to_string(),
-            executable: "bin/nginx.exe".to_string(),
-            is_run: false,
-            name: "Nginx".to_string(),
-            optional_command: String::new(),
-            stop_command: String::new(),
-            path: "C:\\services\\nginx".to_string(),
-            pid: 0,
-            port: 0,
-        };
-
-        let (source_id, path) = service_log_sources(&service);
-        assert_eq!(source_id, service.id);
-        assert_eq!(path, get_log_file_path("service-id"));
     }
 }
