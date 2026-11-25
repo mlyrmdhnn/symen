@@ -44,6 +44,7 @@ watch(
   },
 )
 
+const inputNameError = ref<any>(null)
 const name = ref('')
 const isLoading = ref(false)
 
@@ -68,6 +69,7 @@ const setName = async () => {
 
   if (error.value) {
     showToast('danger', 'Something went wrong', 'Failed to submit your name')
+    inputNameError.value = error.value
     isLoading.value = false
     return
   }
@@ -80,6 +82,7 @@ const setName = async () => {
 <template>
   <div class="absolute flex h-screen w-screen items-center justify-center bg-surface font-sans">
     <div v-if="!showForm" class="flex items-center text-white text-6xl font-bold tracking-tight">
+      
       <div class="relative flex items-center justify-center w-[44px] h-[64px]">
         <div
           class="absolute inset-0 flex items-center justify-center transition-opacity duration-300"
@@ -156,6 +159,7 @@ const setName = async () => {
             type="submit"
           >
             {{ isLoading ? 'Submiting...' : 'Submit' }}
+            <pre>{{ inputNameError }} </pre>
           </button>
         </form>
       </div>
