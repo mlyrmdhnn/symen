@@ -19,6 +19,10 @@ pub fn run() {
     sys.refresh_cpu_usage();
 
     tauri::Builder::default()
+        .setup(|app| {
+            services::init_app_handle(app.handle());
+            Ok(())
+        })
         .manage(SystemMonitorState(Mutex::new(sys)))
         .manage(DownloadCancellationState::default())
         .plugin(tauri_plugin_opener::init())
