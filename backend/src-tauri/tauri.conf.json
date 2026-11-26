@@ -6,7 +6,6 @@
   "build": {
     "frontendDist": "../src"
   },
-
   "app": {
     "withGlobalTauri": true,
     "windows": [
@@ -27,7 +26,9 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,7 +39,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFNjMwNzE0Q0Y5ODI3MzMKUldReko1alBGQWRqSHRYVU5MRkNEMXkzNTg2Z2JNWm1ITEorNW9vVFNFSmZoMUdRcHgydy9VTmgK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZGNzc4OUI3MzI2MzAwODEKUldTQkFHTXl0NGwzYjRsM0dWTGpNeGNDYUpqSzBMdGU1Q1BFUXBjdVJvN1JnY25LSVRabldqSm8K",
       "endpoints": [
         "https://pub-2d96730c227e4b95b37c19eac13b91e0.r2.dev/version.json"
       ],
