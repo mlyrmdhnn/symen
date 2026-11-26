@@ -1,0 +1,37 @@
+name: Generate Tauri Updater Key (Run Once)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-key:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Rust & Tauri CLI
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0"
+
+      - name: Generate Key & Update tauri.conf.json
+        run: node scripts/setup-updater-key.mjs
+
+      - name: Commit updated tauri.conf.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/src-tauri/tauri.conf.json
+          git commit -m "chore: add tauri updater public key"
+          git push
