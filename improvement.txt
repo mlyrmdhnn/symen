@@ -6,3 +6,5 @@ Logo aplikasi yang terlalu putih, ketika ada user yang light mode, maka akan tid
 Memperbaiki path di mod.rs, lib.rs, dan service.rs menggunakan app.path(), menghindari menggunakan env::CARGO_DIR()
 Perhalus animasi modal
 Buat titik 3 untuk menggantikan logo pena, untuk membuat opsi seperti edit environment, atau membuka config suatu services, atau langsung menuju sebuah folder tersimpan (jika mengklik untuk melihat lokasi sebuah services disimpan)
+Buat custom navbar agar support ketika ingin menggunakan light atau dark mode (jadi mirip seperti docker untuk navbar nya)
+Implementasi untuk custom colour
