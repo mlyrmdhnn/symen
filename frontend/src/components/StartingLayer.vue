@@ -44,7 +44,6 @@ watch(
   },
 )
 
-const inputNameError = ref<any>(null)
 const name = ref('')
 const isLoading = ref(false)
 
@@ -69,7 +68,7 @@ const setName = async () => {
 
   if (error.value) {
     showToast('danger', 'Something went wrong', 'Failed to submit your name')
-    inputNameError.value = error.value
+    
     isLoading.value = false
     return
   }
@@ -159,7 +158,6 @@ const setName = async () => {
             type="submit"
           >
             {{ isLoading ? 'Submiting...' : 'Submit' }}
-            <pre>{{ inputNameError }} </pre>
           </button>
         </form>
       </div>
